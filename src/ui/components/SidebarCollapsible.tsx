@@ -105,8 +105,8 @@ const SidebarCollapsibleRoot = React.forwardRef<
     >
       <div
         className={SubframeUtils.twClassNames(
-          "flex w-16 grow shrink-0 basis-0 flex-col items-start border-r border-solid border-neutral-border bg-default-background absolute top-0 bottom-0 transition-all group-hover/e732d4fd:w-60 group-hover/e732d4fd:grow group-hover/e732d4fd:shrink-0 group-hover/e732d4fd:basis-0",
-          { "w-60 grow shrink-0 basis-0": expanded }
+          "flex w-16 h-full flex-col items-start border-r border-solid border-neutral-border bg-default-background fixed top-0 bottom-0 left-0 transition-all z-50 group-hover/e732d4fd:w-60 group-hover/e732d4fd:shadow-lg",
+          { "w-60 shadow-lg": expanded }
         )}
       >
         {header ? (
@@ -115,7 +115,7 @@ const SidebarCollapsibleRoot = React.forwardRef<
           </div>
         ) : null}
         {children ? (
-          <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-1 px-3 py-4 overflow-auto">
+          <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-1 px-3 py-4 overflow-y-auto overflow-x-visible">
             {children}
           </div>
         ) : null}
