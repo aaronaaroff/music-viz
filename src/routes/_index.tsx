@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { Button } from "@/ui/components/Button";
 import { FeatherSave } from "@subframe/core";
@@ -17,8 +17,101 @@ import { FeatherZap } from "@subframe/core";
 import { ToggleGroup } from "@/ui/components/ToggleGroup";
 import { TextField } from "@/ui/components/TextField";
 import { TextArea } from "@/ui/components/TextArea";
+import { AudioSourceSelector } from "@/components/AudioSourceSelector";
+import { AudioLevelMeter } from "@/components/AudioLevelMeter";
+import { KeyboardInput } from "@/components/KeyboardInput";
+import { useAudioManager } from "@/hooks/useAudioManager";
+import { useKeyboardInput } from "@/hooks/useKeyboardInput";
+import { AudioSourceType } from "@/audio/types";
+import { FileSource } from "@/audio/sources/FileSource";
+import { MicrophoneSource } from "@/audio/sources/MicrophoneSource";
+import { KeyboardSource } from "@/audio/sources/KeyboardSource";
 
 function MusicVizUpload() {
+  const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyboardSourceRef = useRef<KeyboardSource | null>(null);
+  
+  const { state, setSource, startAnalysis, stopAnalysis, setVolume } = useAudioManager();
+  
+  // Initialize keyboard source
+  if (!keyboardSourceRef.current && typeof window !== 'undefined') {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    keyboardSourceRef.current = new KeyboardSource(audioContext);
+  }
+
+  const { playNote, stopNote, getActiveNotes, getKeyboardMapping } = useKeyboardInput(
+    keyboardSourceRef.current,
+    currentSourceType === AudioSourceType.KEYBOARD
+  );
+
+  const handleSourceChange = async (sourceType: AudioSourceType) => {
+    // Stop current analysis
+    if (state.isPlaying) {
+      stopAnalysis();
+    }
+
+    setCurrentSourceType(sourceType);
+    
+    if (typeof window === 'undefined') return;
+
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+    try {
+      switch (sourceType) {
+        case AudioSourceType.FILE:
+          // File source will be set when user uploads a file
+          break;
+          
+        case AudioSourceType.MICROPHONE:
+          const micSource = new MicrophoneSource(audioContext);
+          const hasPermission = await micSource.requestPermission();
+          if (hasPermission) {
+            await setSource(micSource, sourceType);
+          }
+          break;
+          
+        case AudioSourceType.KEYBOARD:
+          if (keyboardSourceRef.current) {
+            await setSource(keyboardSourceRef.current, sourceType);
+          }
+          break;
+      }
+    } catch (error) {
+      console.error('Failed to set audio source:', error);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || typeof window === 'undefined') return;
+
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const fileSource = new FileSource(audioContext);
+      await fileSource.loadFile(file);
+      await setSource(fileSource, AudioSourceType.FILE);
+      setCurrentSourceType(AudioSourceType.FILE);
+    } catch (error) {
+      console.error('Failed to load audio file:', error);
+    }
+  };
+
+  const handlePlayPause = async () => {
+    if (state.isPlaying) {
+      stopAnalysis();
+    } else if (state.currentSource) {
+      try {
+        await startAnalysis();
+      } catch (error) {
+        console.error('Failed to start audio analysis:', error);
+      }
+    }
+  };
+
+  const activeNotes = getActiveNotes();
+  const keyboardMapping = getKeyboardMapping();
+
   return (
     <DefaultPageLayout>
       <div className="container max-w-none flex h-full w-full flex-col items-start gap-8 bg-default-background py-12">
@@ -50,34 +143,65 @@ function MusicVizUpload() {
         <div className="flex w-full grow shrink-0 basis-0 items-start gap-6">
           <div className="flex grow shrink-0 basis-0 flex-col items-start gap-6">
             <div className="flex w-full flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-6 py-6">
-              <div className="flex w-full items-center justify-between">
-                <span className="text-heading-3 font-heading-3 text-default-font">
-                  Audio File
-                </span>
-                <Select
-                  className="h-auto w-48 flex-none"
-                  label=""
-                  placeholder="Load preset"
-                  helpText=""
-                  value={undefined}
-                  onValueChange={(value: string) => {}}
-                >
-                  <Select.Item value="minimal">minimal</Select.Item>
-                  <Select.Item value="spectrum">spectrum</Select.Item>
-                  <Select.Item value="particles">particles</Select.Item>
-                </Select>
-              </div>
-              <div className="flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-brand-600 px-6 py-12">
-                <FeatherMusic className="text-heading-1 font-heading-1 text-brand-700" />
-                <div className="flex flex-col items-center justify-center gap-1">
-                  <span className="text-body font-body text-default-font text-center">
-                    Drop your audio file here or click to browse
-                  </span>
-                  <span className="text-caption font-caption text-subtext-color text-center">
-                    Supports MP3, WAV up to 50MB
-                  </span>
+              <AudioSourceSelector
+                currentSource={currentSourceType}
+                onSourceChange={handleSourceChange}
+              />
+              
+              {/* File Upload Section */}
+              {currentSourceType === AudioSourceType.FILE && (
+                <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-brand-600 px-6 py-12">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div 
+                    className="flex flex-col items-center justify-center gap-2 cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FeatherMusic className="text-heading-1 font-heading-1 text-brand-700" />
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className="text-body font-body text-default-font text-center">
+                        Drop your audio file here or click to browse
+                      </span>
+                      <span className="text-caption font-caption text-subtext-color text-center">
+                        Supports MP3, WAV up to 50MB
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Microphone Section */}
+              {currentSourceType === AudioSourceType.MICROPHONE && (
+                <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-warning-600 px-6 py-12">
+                  <FeatherMusic className="text-heading-1 font-heading-1 text-warning-700" />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="text-body font-body text-default-font text-center">
+                      Microphone Input Active
+                    </span>
+                    <span className="text-caption font-caption text-subtext-color text-center">
+                      Make sure to allow microphone access
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Keyboard Section */}
+              {currentSourceType === AudioSourceType.KEYBOARD && (
+                <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-success-600 px-6 py-12">
+                  <KeyboardInput
+                    activeNotes={activeNotes}
+                    onNoteStart={playNote}
+                    onNoteStop={stopNote}
+                    keyboardMapping={keyboardMapping}
+                    className="w-full"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex w-full flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-6 py-6">
               <span className="text-heading-3 font-heading-3 text-default-font">
@@ -94,7 +218,7 @@ function MusicVizUpload() {
                   />
                   <IconButton
                     icon={<FeatherPlay />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                    onClick={handlePlayPause}
                   />
                   <IconButton
                     icon={<FeatherSkipForward />}
@@ -213,6 +337,11 @@ function MusicVizUpload() {
                   ) => {}}
                 />
               </TextArea>
+              
+              {/* Audio Level Meter */}
+              {state.isPlaying && (
+                <AudioLevelMeter analysisData={state.analysisData} />
+              )}
             </div>
           </div>
         </div>

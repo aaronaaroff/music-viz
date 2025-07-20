@@ -7,15 +7,19 @@ A modern, tactical music visualizer application that creates real-time audio vis
 
 ### 1. Audio Visualization Engine
 - **Real-time Processing**: Generate dynamic visualizations based on audio frequency, amplitude, and rhythm
-- **MP3 Upload Support**: Allow users to upload their own music files
+- **Multi-Input Support**: MP3 files, live microphone input, and keyboard synthesis
+- **Live Performance Mode**: Real-time keyboard-controlled audio synthesis for interactive visualizations
 - **Visualization Presets**: Multiple visualization styles and patterns
 - **Custom Parameters**: User-adjustable settings for colors, shapes, sensitivity, and effects
+- **Advanced Analysis**: Beat detection, onset analysis, and spectral feature extraction
 
 ### 2. Editor Interface
 - **Intuitive Controls**: Clean, modern UI with smooth animations
 - **Live Preview**: Real-time visualization updates as parameters change
 - **Timeline Editor**: Sync visualization changes to specific moments in the track
 - **Layering System**: Combine multiple visualization elements
+- **Input Source Selector**: Seamless switching between file upload, microphone, and keyboard modes
+- **Interactive Keyboard**: Visual keyboard interface for live synthesis and performance
 
 ### 3. Social Platform
 - **Explore Page**: Discover visualizations created by other users
@@ -37,8 +41,10 @@ A modern, tactical music visualizer application that creates real-time audio vis
 - **Routing**: React Router with fs-routes file configuration
 - **UI Components**: Tailwind CSS for styling
 - **Animations**: Framer Motion for smooth transitions
-- **Audio Processing**: Web Audio API
+- **Audio Processing**: Web Audio API, MediaDevices API
+- **Synthesis**: OscillatorNode, GainNode, FilterNode for keyboard mode
 - **Visualization**: Canvas API / WebGL (Three.js for 3D)
+- **Input Handling**: Keyboard events, touch gestures, mouse interactions
 
 ### Backend
 - **Platform**: Supabase
@@ -60,9 +66,19 @@ visualizer/
 ├── src/
 │   ├── routes/          # fs-routes pages
 │   ├── components/      # Reusable UI components
+│   │   ├── KeyboardInput/     # Virtual keyboard component
+│   │   ├── AudioSourceSelector/ # Input source chooser
+│   │   └── AudioLevelMeter/   # Real-time level display
 │   ├── visualizers/     # Visualization algorithms
 │   ├── audio/          # Audio processing utilities
+│   │   ├── sources/    # Audio input sources (File, Mic, Synth)
+│   │   ├── analysis/   # Audio analysis & feature extraction
+│   │   ├── effects/    # Audio effects pipeline
+│   │   └── AudioManager.ts # Main audio system
 │   ├── hooks/          # Custom React hooks
+│   │   ├── useAudioSource.ts  # Audio source management
+│   │   ├── useKeyboardInput.ts # Keyboard event handling
+│   │   └── useAudioAnalysis.ts # Real-time analysis data
 │   ├── lib/            # Supabase client & utilities
 │   └── styles/         # Global styles & themes
 ├── public/             # Static assets
@@ -78,8 +94,11 @@ visualizer/
 - [ ] Create base UI components with Tailwind + Framer Motion
 - [ ] Implement basic audio upload and playback
 
-### Phase 2: Core Visualization
+### Phase 2: Core Visualization & Live Input
 - [ ] Develop audio analysis engine using Web Audio API
+- [ ] Implement multi-input audio source system (File, Microphone, Keyboard)
+- [ ] Create keyboard-controlled live synthesis mode
+- [ ] Build advanced audio analysis (beat detection, onset analysis)
 - [ ] Create first set of visualization algorithms
 - [ ] Build visualization parameter controls
 - [ ] Implement real-time preview system
