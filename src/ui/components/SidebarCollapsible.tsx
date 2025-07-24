@@ -6,7 +6,7 @@
  * Dropdown Menu — https://app.subframe.com/b5a91bfb9cba/library?component=Dropdown+Menu_99951515-459b-4286-919e-a89e7549b43b
  */
 
-import React from "react";
+import React, { useState } from "react";
 import * as SubframeUtils from "../utils";
 import { FeatherChevronsUpDown } from "@subframe/core";
 import { DropdownMenu } from "./DropdownMenu";
@@ -94,6 +94,10 @@ const SidebarCollapsibleRoot = React.forwardRef<
   }: SidebarCollapsibleRootProps,
   ref
 ) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const shouldExpand = expanded || isHovered || isDropdownOpen;
   return (
     <nav
       className={SubframeUtils.twClassNames(
@@ -101,12 +105,14 @@ const SidebarCollapsibleRoot = React.forwardRef<
         className
       )}
       ref={ref as any}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       {...otherProps}
     >
       <div
         className={SubframeUtils.twClassNames(
-          "flex w-16 h-full flex-col items-start border-r border-solid border-neutral-border bg-default-background fixed top-0 bottom-0 left-0 transition-all z-50 group-hover/e732d4fd:w-60 group-hover/e732d4fd:shadow-lg",
-          { "w-60 shadow-lg": expanded }
+          "flex w-16 h-full flex-col items-start border-r border-solid border-neutral-border bg-default-background fixed top-0 bottom-0 left-0 transition-all z-50",
+          { "w-60 shadow-lg": shouldExpand }
         )}
       >
         {header ? (
@@ -120,8 +126,13 @@ const SidebarCollapsibleRoot = React.forwardRef<
           </div>
         ) : null}
         {footer ? (
-          <div className="flex w-full items-center gap-4 overflow-hidden border-t border-solid border-neutral-border px-4 py-6">
-            {footer}
+          <div className="flex w-full items-center gap-4 overflow-hidden border-t border-solid border-neutral-border px-4 py-3">
+            {React.isValidElement(footer) 
+              ? React.cloneElement(footer as React.ReactElement<any>, {
+                  onDropdownOpenChange: setIsDropdownOpen
+                })
+              : footer
+            }
           </div>
         ) : null}
       </div>

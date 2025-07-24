@@ -7,7 +7,8 @@
  * Dropdown Menu — https://app.subframe.com/b5a91bfb9cba/library?component=Dropdown+Menu_99951515-459b-4286-919e-a89e7549b43b
  */
 
-import React from "react";
+import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import * as SubframeUtils from "../utils";
 import { SidebarCollapsible } from "../components/SidebarCollapsible";
 import { FeatherHome } from "@subframe/core";
@@ -21,6 +22,9 @@ import { FeatherUserPlus } from "@subframe/core";
 import { FeatherSettings } from "@subframe/core";
 import { FeatherLogOut } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
+import { useAuth } from "../../components/auth/AuthContext";
+import { AuthModal } from "../../components/auth/AuthModal";
+import { Button } from "../components/Button";
 
 interface DefaultPageLayoutRootProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -28,13 +32,24 @@ interface DefaultPageLayoutRootProps
   className?: string;
 }
 
-const DefaultPageLayoutRoot = React.forwardRef<
-  HTMLElement,
-  DefaultPageLayoutRootProps
->(function DefaultPageLayoutRoot(
+const DefaultPageLayoutRoot = React.forwardRef((
   { children, className, ...otherProps }: DefaultPageLayoutRootProps,
-  ref
-) {
+  ref: React.ForwardedRef<HTMLElement>
+) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, profile, signOut, loading } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  const openAuthModal = (mode: 'signin' | 'signup') => {
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  };
   return (
     <div
       className={SubframeUtils.twClassNames(
@@ -52,56 +67,122 @@ const DefaultPageLayoutRoot = React.forwardRef<
           />
         }
         footer={
-          <SubframeCore.DropdownMenu.Root>
-            <SubframeCore.DropdownMenu.Trigger asChild={true}>
-              <div className="flex grow shrink-0 basis-0 items-center gap-4">
-                <div className="flex grow shrink-0 basis-0 items-start gap-4">
-                  <Avatar image="https://res.cloudinary.com/subframe/image/upload/v1711417513/shared/kwut7rhuyivweg8tmyzl.jpg">
-                    A
-                  </Avatar>
-                  <div className="flex flex-col items-start">
-                    <span className="text-caption-bold font-caption-bold text-default-font">
-                      Irvin
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Founder
-                    </span>
+          React.createElement(({ onDropdownOpenChange }: { onDropdownOpenChange?: (open: boolean) => void }) => (
+            <SubframeCore.DropdownMenu.Root
+              onOpenChange={(open) => {
+                onDropdownOpenChange?.(open);
+              }}
+            >
+              <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                <div className="flex w-full items-center gap-4 cursor-pointer">
+                  <div className="flex flex-1 items-center gap-4">
+                    <div
+                      className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (user) {
+                          navigate("/profile");
+                        }
+                      }}
+                    >
+                      <Avatar image={user ? (profile?.avatar_url || undefined) : undefined}>
+                        {user 
+                          ? (profile?.full_name?.[0] || profile?.username?.[0] || user.email?.[0] || 'U')
+                          : 'G'
+                        }
+                      </Avatar>
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="text-caption-bold font-caption-bold text-default-font">
+                        {user 
+                          ? (profile?.full_name || profile?.username || 'User')
+                          : 'Guest'
+                        }
+                      </span>
+                      <span className="text-caption font-caption text-subtext-color">
+                        {user 
+                          ? (profile?.username || user.email)
+                          : 'Not signed in'
+                        }
+                      </span>
+                    </div>
                   </div>
+                  <FeatherChevronsUpDown className="text-body font-body text-default-font" />
                 </div>
-                <FeatherChevronsUpDown className="text-body font-body text-default-font" />
-              </div>
-            </SubframeCore.DropdownMenu.Trigger>
-            <SubframeCore.DropdownMenu.Portal>
-              <SubframeCore.DropdownMenu.Content
-                side="top"
-                align="start"
-                sideOffset={8}
-                asChild={true}
-              >
-                <DropdownMenu>
-                  <DropdownMenu.DropdownItem icon={<FeatherUserPlus />}>
-                    Invite team
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={<FeatherSettings />}>
-                    Settings
-                  </DropdownMenu.DropdownItem>
-                  <div className="flex h-px w-full flex-none flex-col items-center gap-2 bg-neutral-200" />
-                  <DropdownMenu.DropdownItem icon={<FeatherLogOut />}>
-                    Sign out
-                  </DropdownMenu.DropdownItem>
-                </DropdownMenu>
-              </SubframeCore.DropdownMenu.Content>
-            </SubframeCore.DropdownMenu.Portal>
-          </SubframeCore.DropdownMenu.Root>
+              </SubframeCore.DropdownMenu.Trigger>
+              <SubframeCore.DropdownMenu.Portal>
+                <SubframeCore.DropdownMenu.Content
+                  side="right"
+                  align="end"
+                  sideOffset={8}
+                  className="z-[200]"
+                  asChild={true}
+                >
+                  <DropdownMenu className="z-[200] shadow-xl">
+                    {user ? (
+                      <>
+                        <DropdownMenu.DropdownItem 
+                          icon={<FeatherUserPlus />}
+                          onClick={() => console.log("Invite team clicked")}
+                        >
+                          Invite team
+                        </DropdownMenu.DropdownItem>
+                        <DropdownMenu.DropdownItem 
+                          icon={<FeatherSettings />}
+                          onClick={() => console.log("Settings clicked")}
+                        >
+                          Settings
+                        </DropdownMenu.DropdownItem>
+                        <div className="flex h-px w-full flex-none flex-col items-center gap-2 bg-neutral-200" />
+                        <DropdownMenu.DropdownItem 
+                          icon={<FeatherLogOut />}
+                          onClick={handleSignOut}
+                        >
+                          Sign out
+                        </DropdownMenu.DropdownItem>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenu.DropdownItem 
+                          icon={<FeatherLogOut />}
+                          onClick={() => openAuthModal('signin')}
+                        >
+                          Sign in
+                        </DropdownMenu.DropdownItem>
+                        <DropdownMenu.DropdownItem 
+                          icon={<FeatherUserPlus />}
+                          onClick={() => openAuthModal('signup')}
+                        >
+                          Sign up
+                        </DropdownMenu.DropdownItem>
+                      </>
+                    )}
+                  </DropdownMenu>
+                </SubframeCore.DropdownMenu.Content>
+              </SubframeCore.DropdownMenu.Portal>
+            </SubframeCore.DropdownMenu.Root>
+          ))
         }
       >
-        <SidebarCollapsible.NavItem icon={<FeatherHome />} selected={true}>
+        <SidebarCollapsible.NavItem 
+          icon={<FeatherHome />} 
+          selected={location.pathname === "/"}
+          onClick={() => navigate("/")}
+        >
           Create
         </SidebarCollapsible.NavItem>
-        <SidebarCollapsible.NavItem icon={<FeatherLibraryBig />}>
+        <SidebarCollapsible.NavItem 
+          icon={<FeatherLibraryBig />}
+          selected={location.pathname === "/saved"}
+          onClick={() => navigate("/saved")}
+        >
           Saved
         </SidebarCollapsible.NavItem>
-        <SidebarCollapsible.NavItem icon={<FeatherSearch />}>
+        <SidebarCollapsible.NavItem 
+          icon={<FeatherSearch />}
+          selected={location.pathname === "/explore"}
+          onClick={() => navigate("/explore")}
+        >
           Explore
         </SidebarCollapsible.NavItem>
         <SidebarCollapsible.NavItem icon={<FeatherBot />}>
@@ -113,8 +194,16 @@ const DefaultPageLayoutRoot = React.forwardRef<
           {children}
         </div>
       ) : null}
+      
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode={authMode}
+      />
     </div>
   );
 });
 
-export const DefaultPageLayout = DefaultPageLayoutRoot;
+export const DefaultPageLayout = DefaultPageLayoutRoot as React.ForwardRefExoticComponent<
+  DefaultPageLayoutRootProps & React.RefAttributes<HTMLElement>
+>;

@@ -1,139 +1,93 @@
 # Music Visualizer Project
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Quick Start for New Sessions
+
+**Before starting any work, read these files in order:**
+
+1. **`guide-rails/pair_programming.md`** - Our workflow process for story-driven development
+2. **`guide-rails/project_plan_1.md`** - Current progress and next story to work on  
+3. **`guide-rails/technical_considerations.md`** - Lessons learned and implementation decisions
+4. **`guide-rails/music-visualizer-architecture.md`** - Overall architecture and design decisions
+
+**Key workflow reminders:**
+- Always use the TodoWrite tool to track story progress
+- Follow the exact human verification format from pair_programming.md
+- Update technical_considerations.md with lessons learned after each story
+
 ## Project Overview
-A modern, tactical music visualizer application that creates real-time audio visualizations from uploaded MP3 files. The platform includes social features for sharing, exploring, and collaborating on visualizations.
+A modern, tactical music visualizer application that creates real-time audio visualizations from uploaded MP3 files. The platform includes social features for sharing, exploring, and collaborating on visualizations. Styling is based on Subframe UI components and layouts (music-viz/src/ui/).
 
-## Core Features
+## Development Commands
 
-### 1. Audio Visualization Engine
-- **Real-time Processing**: Generate dynamic visualizations based on audio frequency, amplitude, and rhythm
-- **Multi-Input Support**: MP3 files, live microphone input, and keyboard synthesis
-- **Live Performance Mode**: Real-time keyboard-controlled audio synthesis for interactive visualizations
-- **Visualization Presets**: Multiple visualization styles and patterns
-- **Custom Parameters**: User-adjustable settings for colors, shapes, sensitivity, and effects
-- **Advanced Analysis**: Beat detection, onset analysis, and spectral feature extraction
+### Frontend Development
+- `pnpm dev` - Start development server (runs Vite dev server)
+- `pnpm build` - Build the React frontend for production
+- `pnpm preview` - Preview production build
 
-### 2. Editor Interface
-- **Intuitive Controls**: Clean, modern UI with smooth animations
-- **Live Preview**: Real-time visualization updates as parameters change
-- **Timeline Editor**: Sync visualization changes to specific moments in the track
-- **Layering System**: Combine multiple visualization elements
-- **Input Source Selector**: Seamless switching between file upload, microphone, and keyboard modes
-- **Interactive Keyboard**: Visual keyboard interface for live synthesis and performance
+### Package Management
+- Uses `pnpm` as the package manager (not npm or yarn)
+- Lock file: `pnpm-lock.yaml`
 
-### 3. Social Platform
-- **Explore Page**: Discover visualizations created by other users
-- **User Profiles**: Showcase personal visualization galleries
-- **Comments & Feedback**: Community interaction on shared visualizations
-- **Like/Save System**: Bookmark favorite visualizations
-- **Collaboration**: Fork and remix other users' visualizations
+## Architecture Overview
 
-### 4. Export & Sharing
-- **Video Export**: Download visualizations as video files
-- **Share Links**: Direct URLs to view visualizations
-- **Embed Support**: Embed visualizations on external websites
-- **Project Files**: Save/load visualization configurations
+### Technology Stack
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS v3
+- **UI Framework**: Subframe components with custom Tailwind styling
+- **Audio Processing**: Web Audio API, MediaDevices API for real-time analysis
+- **Visualization**: Canvas API for real-time rendering
+- **Backend**: Supabase (PostgreSQL + Auth + Storage + Real-time)
+- **Authentication**: Supabase Auth with Row Level Security
 
-## Technical Stack
+### Current Implementation Status
+- ✅ **Authentication System**: Complete with sign up/in, password validation, profile management
+- ✅ **Visualization Engine**: Three visualization types (Circle, Bars, Wave) with full customization
+- ✅ **Multi-Input Audio**: File upload, microphone input, and keyboard synthesis
+- ✅ **Real-time Analysis**: Beat detection, onset analysis, frequency analysis
+- ✅ **UI Components**: Subframe-based components with consistent styling
+- ⏳ **Database Setup**: Tables created, auth working, custom table access needs debugging
+- ⏳ **Persistence**: Save/load functionality implemented but needs database connection fix
 
-### Frontend
-- **Framework**: React with TypeScript
-- **Routing**: React Router with fs-routes file configuration
-- **UI Components**: Tailwind CSS for styling
-- **Animations**: Framer Motion for smooth transitions
-- **Audio Processing**: Web Audio API, MediaDevices API
-- **Synthesis**: OscillatorNode, GainNode, FilterNode for keyboard mode
-- **Visualization**: Canvas API / WebGL (Three.js for 3D)
-- **Input Handling**: Keyboard events, touch gestures, mouse interactions
+## Project Structure Overview
 
-### Backend
-- **Platform**: Supabase
-  - Authentication & user management
-  - PostgreSQL database for metadata
-  - Storage for MP3 files and exported videos
-  - Real-time subscriptions for social features
-- **CDN**: For serving media files
+See `guide-rails/music-visualizer-architecture.md` for detailed component organization. Key locations:
+- `src/routes/` - File-based routing with React Router
+- `src/components/` - Reusable UI components including audio input components
+- `src/visualizers/` - Visualization engines and Canvas rendering
+- `src/audio/` - Audio processing, analysis, and input source management
+- `src/ui/` - Subframe UI components and layouts
+- `supabase/` - Database migrations and type definitions
 
-### Development Tools
-- **UI Design**: Subframe for component templates
-- **Build System**: Vite for fast development
-- **Testing**: Vitest + React Testing Library
-- **Linting**: ESLint + Prettier
+## Authentication Integration Notes
 
-## Project Structure
-```
-visualizer/
-├── src/
-│   ├── routes/          # fs-routes pages
-│   ├── components/      # Reusable UI components
-│   │   ├── KeyboardInput/     # Virtual keyboard component
-│   │   ├── AudioSourceSelector/ # Input source chooser
-│   │   └── AudioLevelMeter/   # Real-time level display
-│   ├── visualizers/     # Visualization algorithms
-│   ├── audio/          # Audio processing utilities
-│   │   ├── sources/    # Audio input sources (File, Mic, Synth)
-│   │   ├── analysis/   # Audio analysis & feature extraction
-│   │   ├── effects/    # Audio effects pipeline
-│   │   └── AudioManager.ts # Main audio system
-│   ├── hooks/          # Custom React hooks
-│   │   ├── useAudioSource.ts  # Audio source management
-│   │   ├── useKeyboardInput.ts # Keyboard event handling
-│   │   └── useAudioAnalysis.ts # Real-time analysis data
-│   ├── lib/            # Supabase client & utilities
-│   └── styles/         # Global styles & themes
-├── public/             # Static assets
-└── supabase/          # Database migrations & types
-```
+**IMPORTANT**: The app uses Supabase authentication with Row Level Security.
 
-## Development Phases
+### Key Points for Auth-Aware Components:
+- Use `useAuth()` hook: `const { user, profile, loading } = useAuth()`
+- Check `user` for authentication state, `profile` for user data
+- All database operations require authentication
+- Profile is auto-created on user registration
 
-### Phase 1: Foundation (Current)
-- [ ] Set up project structure with React + TypeScript
-- [ ] Configure fs-routes routing system
-- [ ] Initialize Supabase integration
-- [ ] Create base UI components with Tailwind + Framer Motion
-- [ ] Implement basic audio upload and playback
+### Current Auth Status:
+- ✅ Sign up/in working with email verification
+- ✅ Password validation with strength indicators
+- ✅ Profile management and user context
+- ⚠️ Sign out functionality implemented but may need testing
+- ⚠️ Database table access needs debugging (auth works, custom tables don't)
 
-### Phase 2: Core Visualization & Live Input
-- [ ] Develop audio analysis engine using Web Audio API
-- [ ] Implement multi-input audio source system (File, Microphone, Keyboard)
-- [ ] Create keyboard-controlled live synthesis mode
-- [ ] Build advanced audio analysis (beat detection, onset analysis)
-- [ ] Create first set of visualization algorithms
-- [ ] Build visualization parameter controls
-- [ ] Implement real-time preview system
+## Development Workflow
 
-### Phase 3: Editor Features
-- [ ] Design and implement editor UI
-- [ ] Add timeline synchronization
-- [ ] Create preset management system
-- [ ] Enable save/load functionality
+### Current Priority Issues:
+1. **Supabase Database Setup**: Custom tables (profiles, visualizations) exist but queries are hanging
+2. **Save Functionality**: Visualization persistence blocked by database access issues
+3. **Table Access Debugging**: Need to resolve RLS policies or connection issues
 
-### Phase 4: Social Platform
-- [ ] User authentication with Supabase Auth
-- [ ] Profile pages and visualization galleries
-- [ ] Explore page with filtering/sorting
-- [ ] Comments and interaction system
-
-### Phase 5: Export & Polish
-- [ ] Video export functionality
-- [ ] Sharing and embed features
-- [ ] Performance optimization
-- [ ] Mobile responsiveness
-
-## Design Principles
-1. **Intuitive UX**: Easy for beginners, powerful for advanced users
-2. **Smooth Animations**: Every interaction should feel fluid and responsive
-3. **Modern Aesthetic**: Clean, tactical design with attention to detail
-4. **Performance First**: Optimized for real-time visualization rendering
-5. **Community Focused**: Social features that encourage creativity and sharing
-
-## Next Steps
-1. Finalize Subframe UI template/style guide
-2. Set up development environment with chosen tech stack
-3. Create initial project structure
-4. Begin Phase 1 implementation
+### Testing Tools Available:
+- `/test-auth` route with multiple debugging components
+- Raw HTTP tests to bypass Supabase JS client
+- Quick table access tests with timing information
 
 ---
 
-This document will be updated as the project evolves. Use it as a reference for architectural decisions and feature planning.
+This document will be updated as the project evolves. Use it as a reference for architectural decisions and development workflow.

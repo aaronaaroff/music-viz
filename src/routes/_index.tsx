@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { Button } from "@/ui/components/Button";
 import { FeatherSave } from "@subframe/core";
+import { FeatherExpand } from "@subframe/core";
 import { Select } from "@/ui/components/Select";
 import { FeatherMusic } from "@subframe/core";
 import { IconButton } from "@/ui/components/IconButton";
@@ -30,6 +31,9 @@ import { MicrophoneSource } from "@/audio/sources/MicrophoneSource";
 import { KeyboardSource } from "@/audio/sources/KeyboardSource";
 import { VisualizationCanvas } from "@/visualizers/VisualizationCanvas";
 import { VisualizationType, ColorTheme } from "@/visualizers/types";
+import { useAuth } from "@/components/auth/AuthContext";
+import { createVisualization, updateVisualization, getNextDraftNumber } from "@/lib/api/visualizations";
+import { supabase } from "@/lib/supabase";
 
 function MusicVizUpload() {
   const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
@@ -38,11 +42,33 @@ function MusicVizUpload() {
   const [uploadFeedback, setUploadFeedback] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
+  const [visualizationName, setVisualizationName] = useState<string>("Visualization 1");
+  const [isEditingName, setIsEditingName] = useState<boolean>(false);
+  const [currentVisualizationId, setCurrentVisualizationId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardSourceRef = useRef<KeyboardSource | null>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const { state, setSource, startAnalysis, stopAnalysis, setVolume } = useAudioManager();
+  const { user } = useAuth();
+  
+  // Initialize draft number when user is available
+  useEffect(() => {
+    const initializeDraftNumber = async () => {
+      if (user && visualizationName === "Visualization 1") {
+        try {
+          const nextNumber = await getNextDraftNumber(user.id);
+          setVisualizationName(`Visualization ${nextNumber}`);
+        } catch (error) {
+          console.error('Error getting next draft number:', error);
+        }
+      }
+    };
+
+    initializeDraftNumber();
+  }, [user, visualizationName]);
   
   // Visualization system
   const {
@@ -241,25 +267,164 @@ function MusicVizUpload() {
     };
   }, []);
 
+  // Generate next available draft number
+  const getNextDraftNumber = (): number => {
+    // In a real app, this would check against saved drafts
+    // For now, we'll simulate checking localStorage or a database
+    const existingDrafts = [1, 2]; // Simulate existing drafts
+    let nextNumber = 1;
+    while (existingDrafts.includes(nextNumber)) {
+      nextNumber++;
+    }
+    return nextNumber;
+  };
+
+  // Handle name editing
+  const handleNameClick = () => {
+    setIsEditingName(true);
+  };
+
+  const handleNameChange = (newName: string) => {
+    if (newName.trim()) {
+      setVisualizationName(newName.trim());
+    }
+    setIsEditingName(false);
+  };
+
+  const handleNameKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLInputElement;
+      handleNameChange(target.value);
+    } else if (e.key === 'Escape') {
+      setIsEditingName(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      setSaveStatus({ type: 'error', message: 'Please sign in to save your visualization' });
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveStatus({ type: null, message: "" });
+    
+    // First check if tables exist
+    try {
+      const { error: tableError } = await supabase.from('visualizations').select('count').limit(1);
+      if (tableError && tableError.code === '42P01') {
+        setSaveStatus({ 
+          type: 'error', 
+          message: 'Database not set up. Please see SUPABASE_SETUP_COMPLETE.md' 
+        });
+        setIsSaving(false);
+        return;
+      }
+    } catch (err) {
+      console.error('Database check error:', err);
+    }
+
+    try {
+      const visualizationData = {
+        title: visualizationName,
+        description: "Created with Music Visualizer",
+        settings: {
+          ...visualizationSettings,
+          audioSource: currentSourceType,
+          audioFileName: uploadedFileName || null,
+        },
+        audio_file_name: uploadedFileName || undefined,
+        is_draft: true,
+        is_public: false,
+      };
+
+      if (currentVisualizationId) {
+        // Update existing visualization
+        const { error } = await updateVisualization(currentVisualizationId, visualizationData);
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
+        setSaveStatus({ type: 'success', message: 'Visualization updated successfully!' });
+      } else {
+        // Create new visualization
+        const { data, error } = await createVisualization(visualizationData);
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
+        if (data) {
+          setCurrentVisualizationId(data.id);
+          setSaveStatus({ type: 'success', message: 'Visualization saved successfully!' });
+        }
+      }
+    } catch (error) {
+      console.error('Error saving visualization:', error);
+      setSaveStatus({ 
+        type: 'error', 
+        message: error instanceof Error ? error.message : 'Failed to save visualization' 
+      });
+    } finally {
+      setIsSaving(false);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveStatus({ type: null, message: "" });
+      }, 3000);
+    }
+  };
+
   return (
     <DefaultPageLayout>
       <div className="container max-w-none flex h-full w-full flex-col items-start gap-8 bg-default-background py-12">
         <div className="flex w-full items-center justify-between">
-          <div className="flex flex-col items-start gap-1">
-            <span className="text-heading-1 font-heading-1 text-default-font">
-              Create Visualization
-            </span>
+          <div className="flex flex-col items-start">
+            {isEditingName ? (
+              <input
+                type="text"
+                defaultValue={visualizationName}
+                className="text-heading-1 font-heading-1 text-default-font bg-transparent border-b-2 border-brand-600 outline-none"
+                autoFocus
+                onBlur={(e) => handleNameChange(e.target.value)}
+                onKeyDown={handleNameKeyPress}
+              />
+            ) : (
+              <span 
+                className="text-heading-1 font-heading-1 text-default-font cursor-pointer hover:text-brand-700 transition-colors"
+                onClick={handleNameClick}
+              >
+                {visualizationName}
+              </span>
+            )}
             <span className="text-body font-body text-subtext-color">
               Upload music and customize your visualization
             </span>
+            {saveStatus.type && (
+              <div className={`text-caption font-caption mt-2 px-3 py-2 rounded-md border ${
+                saveStatus.type === 'success' 
+                  ? 'text-success-600 bg-success-50 border-success-200' 
+                  : 'text-error-700 bg-error-50 border-error-200'
+              }`}>
+                {saveStatus.message}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
+              variant="brand-tertiary"
+              icon={<FeatherExpand />}
+              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+            />
+            <Button
               variant="neutral-secondary"
               icon={<FeatherSave />}
-              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+              onClick={handleSave}
+              loading={isSaving}
+              disabled={isSaving}
             >
-              Save draft
+              {currentVisualizationId ? 'Update' : 'Save draft'}
             </Button>
             <Button
               variant="destructive-secondary"
