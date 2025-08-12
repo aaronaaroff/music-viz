@@ -109,36 +109,77 @@ export async function getSavedVisualizations(userId: string) {
 
 // Create a new visualization
 export async function createVisualization(data: CreateVisualizationData) {
-  const { data: { user } } = await supabase.auth.getUser();
+  // Get fresh session to ensure we have current auth state
+  const { data: { session } } = await supabase.auth.getSession();
   
-  if (!user) {
+  if (!session?.user) {
     return { data: null, error: { message: 'User not authenticated' } };
   }
 
   const visualizationData: VisualizationInsert = {
     ...data,
-    user_id: user.id,
+    user_id: session.user.id,
   };
 
-  const { data: visualization, error } = await supabase
-    .from('visualizations')
-    .insert(visualizationData)
-    .select()
-    .single();
+  try {
+    // Add timeout to prevent hanging
+    const insertPromise = supabase
+      .from('visualizations')
+      .insert(visualizationData)
+      .select()
+      .single();
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Save operation timed out')), 10000)
+    );
 
-  return { data: visualization, error };
+    const { data: visualization, error } = await Promise.race([
+      insertPromise,
+      timeoutPromise
+    ]) as any;
+
+    return { data: visualization, error };
+  } catch (error) {
+    console.error('Create visualization error:', error);
+    return { 
+      data: null, 
+      error: { 
+        message: error instanceof Error ? error.message : 'Failed to save visualization' 
+      } 
+    };
+  }
 }
 
 // Update a visualization
 export async function updateVisualization(id: string, updates: VisualizationUpdate) {
-  const { data, error } = await supabase
-    .from('visualizations')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+  try {
+    // Add timeout to prevent hanging
+    const updatePromise = supabase
+      .from('visualizations')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Update operation timed out')), 10000)
+    );
 
-  return { data, error };
+    const { data, error } = await Promise.race([
+      updatePromise,
+      timeoutPromise
+    ]) as any;
+
+    return { data, error };
+  } catch (error) {
+    console.error('Update visualization error:', error);
+    return { 
+      data: null, 
+      error: { 
+        message: error instanceof Error ? error.message : 'Failed to update visualization' 
+      } 
+    };
+  }
 }
 
 // Delete a visualization
@@ -153,9 +194,9 @@ export async function deleteVisualization(id: string) {
 
 // Like/unlike a visualization
 export async function toggleLike(visualizationId: string) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
   
-  if (!user) {
+  if (!session?.user) {
     return { error: { message: 'User not authenticated' } };
   }
 
@@ -163,7 +204,7 @@ export async function toggleLike(visualizationId: string) {
   const { data: existingLike } = await supabase
     .from('likes')
     .select('id')
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .eq('visualization_id', visualizationId)
     .single();
 
@@ -181,7 +222,7 @@ export async function toggleLike(visualizationId: string) {
     const { error } = await supabase
       .from('likes')
       .insert({
-        user_id: user.id,
+        user_id: session.user.id,
         visualization_id: visualizationId
       });
     
@@ -191,9 +232,9 @@ export async function toggleLike(visualizationId: string) {
 
 // Save/unsave a visualization
 export async function toggleSave(visualizationId: string) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
   
-  if (!user) {
+  if (!session?.user) {
     return { error: { message: 'User not authenticated' } };
   }
 
@@ -201,7 +242,7 @@ export async function toggleSave(visualizationId: string) {
   const { data: existingSave } = await supabase
     .from('saves')
     .select('id')
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .eq('visualization_id', visualizationId)
     .single();
 
@@ -219,7 +260,7 @@ export async function toggleSave(visualizationId: string) {
     const { error } = await supabase
       .from('saves')
       .insert({
-        user_id: user.id,
+        user_id: session.user.id,
         visualization_id: visualizationId
       });
     

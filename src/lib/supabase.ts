@@ -12,22 +12,14 @@ if (!supabaseAnonKey) {
   throw new Error('Missing VITE_SUPABASE_ANON_KEY environment variable');
 }
 
+// Single Supabase client instance to avoid multiple GoTrueClient conflicts
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  db: {
-    schema: 'public'
-  },
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
-    storageKey: 'music-viz-auth',
-    flowType: 'pkce'
-  },
-  global: {
-    headers: {
-      'x-client-info': 'music-viz@1.0.0'
-    }
+    detectSessionInUrl: false,
+    // Use a unique storage key to prevent conflicts
+    storageKey: 'music-viz-supabase-auth'
   }
 });
 

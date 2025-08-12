@@ -32,8 +32,10 @@ import { KeyboardSource } from "@/audio/sources/KeyboardSource";
 import { VisualizationCanvas } from "@/visualizers/VisualizationCanvas";
 import { VisualizationType, ColorTheme } from "@/visualizers/types";
 import { useAuth } from "@/components/auth/AuthContext";
-import { createVisualization, updateVisualization, getNextDraftNumber } from "@/lib/api/visualizations";
+import { getNextDraftNumber } from "@/lib/api/visualizations";
+import { robustCreateVisualization, robustUpdateVisualization } from "@/lib/api/robustOperations";
 import { supabase } from "@/lib/supabase";
+import { useSessionPersistence } from "@/hooks/useSessionPersistence";
 
 function MusicVizUpload() {
   const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
@@ -51,13 +53,48 @@ function MusicVizUpload() {
   const keyboardSourceRef = useRef<KeyboardSource | null>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Track tab focus for better save UX
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        (window as any).lastTabReturn = Date.now();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+  
   const { state, setSource, startAnalysis, stopAnalysis, setVolume } = useAudioManager();
   const { user } = useAuth();
+  const { saveSession, loadSession, clearSession } = useSessionPersistence();
   
+  // Load saved session on mount
+  useEffect(() => {
+    const savedSession = loadSession();
+    if (savedSession) {
+      console.log('Restoring saved session:', savedSession);
+      
+      // Restore visualization state
+      if (savedSession.visualizationId) {
+        setCurrentVisualizationId(savedSession.visualizationId);
+      }
+      if (savedSession.visualizationName) {
+        setVisualizationName(savedSession.visualizationName);
+      }
+      if (savedSession.audioSource?.fileName) {
+        setUploadedFileName(savedSession.audioSource.fileName);
+      }
+      // Settings will be restored after visualization hook is initialized
+    }
+  }, [loadSession]);
+
   // Initialize draft number when user is available
   useEffect(() => {
     const initializeDraftNumber = async () => {
-      if (user && visualizationName === "Visualization 1") {
+      // Only initialize if we don't have a saved session
+      const savedSession = loadSession();
+      if (user && visualizationName === "Visualization 1" && !savedSession) {
         try {
           const nextNumber = await getNextDraftNumber(user.id);
           setVisualizationName(`Visualization ${nextNumber}`);
@@ -68,11 +105,12 @@ function MusicVizUpload() {
     };
 
     initializeDraftNumber();
-  }, [user, visualizationName]);
+  }, [user, loadSession]);
   
   // Visualization system
   const {
     settings: visualizationSettings,
+    updateSettings,
     setVisualizationType,
     setColorTheme,
     setSensitivity,
@@ -86,6 +124,48 @@ function MusicVizUpload() {
     toggleFlashOnset,
     loadPreset,
   } = useVisualization();
+
+  // Restore visualization settings from saved session
+  useEffect(() => {
+    const savedSession = loadSession();
+    if (savedSession?.settings && updateSettings) {
+      updateSettings(savedSession.settings);
+    }
+  }, [updateSettings, loadSession]);
+
+  // Auto-save session state
+  useEffect(() => {
+    const saveCurrentSession = () => {
+      saveSession({
+        visualizationId: currentVisualizationId,
+        visualizationName,
+        settings: visualizationSettings,
+        audioSource: uploadedFileName ? {
+          type: currentSourceType as any,
+          fileName: uploadedFileName
+        } : undefined
+      });
+    };
+
+    // Save on state changes (debounced)
+    const timeoutId = setTimeout(saveCurrentSession, 500);
+
+    // Also save when tab is hidden
+    const handleSaveEvent = () => saveCurrentSession();
+    window.addEventListener('saveSessionState', handleSaveEvent);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('saveSessionState', handleSaveEvent);
+    };
+  }, [
+    currentVisualizationId, 
+    visualizationName, 
+    visualizationSettings, 
+    uploadedFileName, 
+    currentSourceType, 
+    saveSession
+  ]);
   
   // Initialize keyboard source
   if (!keyboardSourceRef.current && typeof window !== 'undefined') {
@@ -307,7 +387,7 @@ function MusicVizUpload() {
     }
 
     setIsSaving(true);
-    setSaveStatus({ type: null, message: "" });
+    setSaveStatus({ type: null, message: "Preparing to save..." });
     
     // First check if tables exist
     try {
@@ -339,8 +419,8 @@ function MusicVizUpload() {
       };
 
       if (currentVisualizationId) {
-        // Update existing visualization
-        const { error } = await updateVisualization(currentVisualizationId, visualizationData);
+        // Update existing visualization with retry logic
+        const { data, error } = await robustUpdateVisualization(currentVisualizationId, visualizationData);
         
         if (error) {
           throw new Error(error.message);
@@ -348,8 +428,8 @@ function MusicVizUpload() {
         
         setSaveStatus({ type: 'success', message: 'Visualization updated successfully!' });
       } else {
-        // Create new visualization
-        const { data, error } = await createVisualization(visualizationData);
+        // Create new visualization with retry logic
+        const { data, error } = await robustCreateVisualization(visualizationData);
         
         if (error) {
           throw new Error(error.message);
@@ -358,6 +438,17 @@ function MusicVizUpload() {
         if (data) {
           setCurrentVisualizationId(data.id);
           setSaveStatus({ type: 'success', message: 'Visualization saved successfully!' });
+          
+          // Update session with new ID
+          saveSession({
+            visualizationId: data.id,
+            visualizationName,
+            settings: visualizationSettings,
+            audioSource: uploadedFileName ? {
+              type: currentSourceType as any,
+              fileName: uploadedFileName
+            } : undefined
+          });
         }
       }
     } catch (error) {

@@ -41,6 +41,12 @@ const DefaultPageLayoutRoot = React.forwardRef((
   const { user, profile, signOut, loading } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  
+  // Reset dropdown when auth state changes
+  React.useEffect(() => {
+    setDropdownOpen(false);
+  }, [user, loading]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -69,7 +75,9 @@ const DefaultPageLayoutRoot = React.forwardRef((
         footer={
           React.createElement(({ onDropdownOpenChange }: { onDropdownOpenChange?: (open: boolean) => void }) => (
             <SubframeCore.DropdownMenu.Root
+              open={dropdownOpen}
               onOpenChange={(open) => {
+                setDropdownOpen(open);
                 onDropdownOpenChange?.(open);
               }}
             >
@@ -85,24 +93,30 @@ const DefaultPageLayoutRoot = React.forwardRef((
                         }
                       }}
                     >
-                      <Avatar image={user ? (profile?.avatar_url || undefined) : undefined}>
-                        {user 
-                          ? (profile?.full_name?.[0] || profile?.username?.[0] || user.email?.[0] || 'U')
-                          : 'G'
+                      <Avatar image={!loading && user ? (profile?.avatar_url || undefined) : undefined}>
+                        {loading 
+                          ? '...'
+                          : user 
+                            ? (profile?.full_name?.[0] || profile?.username?.[0] || user.email?.[0] || 'U').toUpperCase()
+                            : 'G'
                         }
                       </Avatar>
                     </div>
                     <div className="flex flex-col items-start">
                       <span className="text-caption-bold font-caption-bold text-default-font">
-                        {user 
-                          ? (profile?.full_name || profile?.username || 'User')
-                          : 'Guest'
+                        {loading 
+                          ? 'Loading...'
+                          : user 
+                            ? (profile?.full_name || profile?.username || user.email?.split('@')[0] || 'User')
+                            : 'Guest'
                         }
                       </span>
                       <span className="text-caption font-caption text-subtext-color">
-                        {user 
-                          ? (profile?.username || user.email)
-                          : 'Not signed in'
+                        {loading 
+                          ? '...'
+                          : user 
+                            ? (profile?.username ? `@${profile.username}` : user.email)
+                            : 'Not signed in'
                         }
                       </span>
                     </div>
