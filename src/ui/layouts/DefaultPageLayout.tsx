@@ -85,10 +85,11 @@ const DefaultPageLayoutRoot = React.forwardRef((
                 <div className="flex w-full items-center gap-4 cursor-pointer">
                   <div className="flex flex-1 items-center gap-4">
                     <div
-                      className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      className={user ? "flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" : "flex-shrink-0"}
+                      onPointerDown={(e) => {
                         if (user) {
+                          e.preventDefault();
+                          e.stopPropagation();
                           navigate("/profile");
                         }
                       }}

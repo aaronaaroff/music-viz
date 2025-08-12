@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { TextField } from "@/ui/components/TextField";
 import { FeatherSearch } from "@subframe/core";
@@ -16,301 +16,584 @@ import { FeatherMessageCircle } from "@subframe/core";
 import { FeatherBookmark } from "@subframe/core";
 import { Badge } from "@/ui/components/Badge";
 import { Slider } from "@/ui/components/Slider";
+import { FeatherX } from "@subframe/core";
+import { FeatherChevronLeft } from "@subframe/core";
+import { FeatherSend } from "@subframe/core";
+import { FeatherUser } from "@subframe/core";
+import { FeatherPlay } from "@subframe/core";
+import { FeatherMusic } from "@subframe/core";
+import { useAuth } from "@/components/auth/AuthContext";
+import { getPublicVisualizations, toggleLike, toggleSave } from "@/lib/api/visualizations";
+import { useNavigate } from "react-router-dom";
+import type { Database } from "@/lib/database.types";
 
-function CreatorSidebarView() {
+type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
+  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
+  user_liked?: { user_id: string }[];
+  user_saved?: { user_id: string }[];
+  likes_count?: number;
+  comments_count?: number;
+};
+
+interface Comment {
+  id: string;
+  user_id: string;
+  visualization_id: string;
+  content: string;
+  created_at: string;
+  user: {
+    username: string;
+    full_name: string;
+    avatar_url: string | null;
+  };
+}
+
+function ExplorePage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  // State
+  const [visualizations, setVisualizations] = useState<Visualization[]>([]);
+  const [filteredVisualizations, setFilteredVisualizations] = useState<Visualization[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<"trending" | "recent" | "popular">("trending");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [durationRange, setDurationRange] = useState([50]);
+  const [showFilters, setShowFilters] = useState(true);
+  const [expandedVisualizationId, setExpandedVisualizationId] = useState<string | null>(null);
+  const [comments, setComments] = useState<{ [key: string]: Comment[] }>({});
+  const [newComment, setNewComment] = useState("");
+  const [filterByFollowing, setFilterByFollowing] = useState(false);
+  
+  // Animation refs
+  const expandedRef = useRef<HTMLDivElement>(null);
+  
+  // Categories
+  const categories = ["all", "ambient", "electronic", "hip-hop", "rock", "jazz", "classical", "experimental"];
+  
+  // Load visualizations
+  useEffect(() => {
+    loadVisualizations();
+  }, [sortBy]);
+  
+  const loadVisualizations = async () => {
+    setLoading(true);
+    try {
+      const sortMap = {
+        trending: 'likes_count',
+        recent: 'created_at',
+        popular: 'views_count'
+      };
+      
+      const { data, error } = await getPublicVisualizations(
+        0, 
+        50, 
+        selectedCategory === 'all' ? undefined : selectedCategory,
+        sortMap[sortBy] as any
+      );
+      
+      if (error) {
+        console.error('Error loading visualizations:', error);
+      } else {
+        setVisualizations(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading visualizations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Filter visualizations
+  useEffect(() => {
+    let filtered = [...visualizations];
+    
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(viz => 
+        viz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        viz.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        viz.profiles?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        viz.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Category filter
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(viz => viz.category === selectedCategory);
+    }
+    
+    // Following filter
+    if (filterByFollowing && user) {
+      // In a real app, you'd filter by followed users
+      // For now, this is a placeholder
+    }
+    
+    setFilteredVisualizations(filtered);
+  }, [visualizations, searchTerm, selectedCategory, filterByFollowing, user]);
+  
+  // Handle like
+  const handleLike = async (visualizationId: string) => {
+    if (!user) {
+      navigate('/auth/signin');
+      return;
+    }
+    
+    try {
+      const { isLiked, error } = await toggleLike(visualizationId);
+      if (!error) {
+        // Update local state
+        setVisualizations(prev => prev.map(viz => {
+          if (viz.id === visualizationId) {
+            const currentLikes = viz.likes_count || 0;
+            return {
+              ...viz,
+              likes_count: isLiked ? currentLikes + 1 : Math.max(0, currentLikes - 1),
+              user_liked: isLiked ? [{ user_id: user.id }] : []
+            };
+          }
+          return viz;
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+  
+  // Handle save
+  const handleSave = async (visualizationId: string) => {
+    if (!user) {
+      navigate('/auth/signin');
+      return;
+    }
+    
+    try {
+      const { isSaved, error } = await toggleSave(visualizationId);
+      if (!error) {
+        // Update local state
+        setVisualizations(prev => prev.map(viz => {
+          if (viz.id === visualizationId) {
+            return {
+              ...viz,
+              user_saved: isSaved ? [{ user_id: user.id }] : []
+            };
+          }
+          return viz;
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling save:', error);
+    }
+  };
+  
+  // Handle comment expansion
+  const handleCommentClick = async (visualizationId: string) => {
+    if (expandedVisualizationId === visualizationId) {
+      setExpandedVisualizationId(null);
+    } else {
+      setExpandedVisualizationId(visualizationId);
+      // Load comments (mock for now)
+      if (!comments[visualizationId]) {
+        setComments(prev => ({
+          ...prev,
+          [visualizationId]: [
+            {
+              id: '1',
+              user_id: '1',
+              visualization_id: visualizationId,
+              content: 'Amazing visualization! The colors sync perfectly with the beat.',
+              created_at: new Date().toISOString(),
+              user: {
+                username: 'musiclover',
+                full_name: 'Music Lover',
+                avatar_url: null
+              }
+            },
+            {
+              id: '2',
+              user_id: '2',
+              visualization_id: visualizationId,
+              content: 'How did you get the particles to react so smoothly?',
+              created_at: new Date(Date.now() - 3600000).toISOString(),
+              user: {
+                username: 'visualartist',
+                full_name: 'Visual Artist',
+                avatar_url: null
+              }
+            }
+          ]
+        }));
+      }
+    }
+  };
+  
+  // Handle add comment
+  const handleAddComment = (visualizationId: string) => {
+    if (!user || !newComment.trim()) return;
+    
+    const comment: Comment = {
+      id: Date.now().toString(),
+      user_id: user.id,
+      visualization_id: visualizationId,
+      content: newComment,
+      created_at: new Date().toISOString(),
+      user: {
+        username: user.email?.split('@')[0] || 'user',
+        full_name: user.email?.split('@')[0] || 'User',
+        avatar_url: null
+      }
+    };
+    
+    setComments(prev => ({
+      ...prev,
+      [visualizationId]: [comment, ...(prev[visualizationId] || [])]
+    }));
+    
+    setNewComment("");
+  };
+  
+  const renderVisualizationCard = (viz: Visualization) => {
+    const isExpanded = expandedVisualizationId === viz.id;
+    const isLiked = user && viz.user_liked?.some(like => like.user_id === user.id);
+    const isSaved = user && viz.user_saved?.some(save => save.user_id === user.id);
+    
+    return (
+      <div
+        key={viz.id}
+        className={`flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 transition-all duration-300 ${
+          isExpanded ? 'col-span-full' : ''
+        }`}
+        ref={isExpanded ? expandedRef : null}
+      >
+        <div className={`flex ${isExpanded ? 'gap-6' : 'flex-col gap-4'} w-full`}>
+          {/* Visualization preview */}
+          <div className={`flex ${isExpanded ? 'w-1/2' : 'w-full'} flex-col gap-4`}>
+            <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-md bg-black">
+              <img
+                className="grow shrink-0 basis-0 self-stretch object-cover opacity-50"
+                src={viz.thumbnail_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
+                alt={viz.title}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <IconButton
+                  variant="inverse"
+                  size="large"
+                  icon={<FeatherPlay />}
+                  onClick={() => navigate(`/?load=${viz.id}`)}
+                />
+              </div>
+              {viz.audio_file_name && (
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1">
+                  <FeatherMusic className="text-caption font-caption text-white" />
+                  <span className="text-caption font-caption text-white truncate max-w-[150px]">
+                    {viz.audio_file_name}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Info section */}
+            <div className="flex w-full items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Avatar
+                  size="small"
+                  image={viz.profiles?.avatar_url || undefined}
+                  onClick={() => navigate(`/profile/${viz.profiles?.username}`)}
+                  className="cursor-pointer hover:opacity-80"
+                >
+                  {(viz.profiles?.full_name?.[0] || viz.profiles?.username?.[0] || 'U').toUpperCase()}
+                </Avatar>
+                <div className="flex flex-col">
+                  <span className="text-body-bold font-body-bold text-default-font">
+                    {viz.title}
+                  </span>
+                  <span className="text-caption font-caption text-subtext-color">
+                    by {viz.profiles?.full_name || viz.profiles?.username || 'Unknown'}
+                  </span>
+                </div>
+              </div>
+              <IconButton
+                icon={<FeatherMoreVertical />}
+                onClick={() => {}}
+              />
+            </div>
+            
+            {/* Action buttons */}
+            <div className="flex w-full items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isLiked ? "brand-tertiary" : "neutral-tertiary"}
+                  icon={<FeatherHeart />}
+                  onClick={() => handleLike(viz.id)}
+                >
+                  {viz.likes_count || 0}
+                </Button>
+                <Button
+                  variant={isExpanded ? "brand-tertiary" : "neutral-tertiary"}
+                  icon={<FeatherMessageCircle />}
+                  onClick={() => handleCommentClick(viz.id)}
+                >
+                  {viz.comments_count || 0}
+                </Button>
+              </div>
+              <IconButton
+                variant={isSaved ? "brand-primary" : "neutral-primary"}
+                icon={<FeatherBookmark />}
+                onClick={() => handleSave(viz.id)}
+              />
+            </div>
+          </div>
+          
+          {/* Comments section (expanded view) */}
+          {isExpanded && (
+            <div className="flex w-1/2 flex-col gap-4 border-l border-solid border-neutral-border pl-6">
+              <div className="flex items-center justify-between">
+                <span className="text-heading-3 font-heading-3 text-default-font">Comments</span>
+                <IconButton
+                  size="small"
+                  icon={<FeatherX />}
+                  onClick={() => setExpandedVisualizationId(null)}
+                />
+              </div>
+              
+              {/* Comment input */}
+              {user && (
+                <div className="flex items-center gap-2">
+                  <TextField className="flex-1" label="" helpText="">
+                    <TextField.Input
+                      placeholder="Add a comment..."
+                      value={newComment}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewComment(e.target.value)}
+                      onKeyPress={(e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' && newComment.trim()) {
+                          handleAddComment(viz.id);
+                        }
+                      }}
+                    />
+                  </TextField>
+                  <IconButton
+                    icon={<FeatherSend />}
+                    onClick={() => handleAddComment(viz.id)}
+                    disabled={!newComment.trim()}
+                  />
+                </div>
+              )}
+              
+              {/* Comments list */}
+              <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto">
+                {comments[viz.id]?.map(comment => (
+                  <div key={comment.id} className="flex gap-3">
+                    <Avatar size="small">
+                      {comment.user.username[0].toUpperCase()}
+                    </Avatar>
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-body-bold font-body-bold text-default-font">
+                          {comment.user.full_name}
+                        </span>
+                        <span className="text-caption font-caption text-subtext-color">
+                          {new Date(comment.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <span className="text-body font-body text-default-font">
+                        {comment.content}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+  
   return (
     <DefaultPageLayout>
       <div className="flex h-full w-full flex-col items-start overflow-hidden">
+        {/* Header */}
         <div className="flex w-full items-center justify-between border-b border-solid border-neutral-border px-8 py-2">
           <TextField
-            className="h-auto grow shrink-0 basis-0"
+            className="h-auto grow shrink-0 basis-0 max-w-md"
             variant="filled"
             label=""
             helpText=""
             icon={<FeatherSearch />}
           >
             <TextField.Input
-              placeholder="Search visualizations..."
-              value=""
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {}}
+              placeholder="Search visualizations, users, or music..."
+              value={searchTerm}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             />
           </TextField>
           <div className="flex items-center gap-2">
-            <ToggleGroup value="" onValueChange={(value: string) => {}}>
-              <ToggleGroup.Item icon={<FeatherGrid />} value="1b03c104" />
-              <ToggleGroup.Item icon={<FeatherList />} value="0248073d" />
+            <ToggleGroup value={viewMode} onValueChange={(value: string) => setViewMode(value as "grid" | "list")}>
+              <ToggleGroup.Item icon={<FeatherGrid />} value="grid" />
+              <ToggleGroup.Item icon={<FeatherList />} value="list" />
             </ToggleGroup>
             <Button
               icon={<FeatherPlus />}
-              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+              onClick={() => navigate('/?new=true')}
             >
               Create New
             </Button>
             <Button
-              variant="neutral-tertiary"
+              variant={showFilters ? "brand-tertiary" : "neutral-tertiary"}
               icon={<FeatherFilter />}
-              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+              onClick={() => setShowFilters(!showFilters)}
             >
               Filters
             </Button>
           </div>
         </div>
+        
+        {/* Main content */}
         <div className="flex w-full grow shrink-0 basis-0 items-start overflow-hidden">
+          {/* Visualizations grid */}
           <div className="flex grow shrink-0 basis-0 flex-col items-start gap-6 self-stretch px-6 py-6 overflow-auto">
-            <div className="w-full items-start gap-6 grid grid-cols-3">
-              <div className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-neutral-50 px-4 py-4 mobile:flex-col mobile:flex-nowrap mobile:justify-between">
-                <div className="flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-sm bg-neutral-100">
-                  <img
-                    className="grow shrink-0 basis-0 self-stretch object-cover"
-                    src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                  />
-                </div>
-                <div className="flex w-full items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar
-                      size="small"
-                      image="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    >
-                      JD
-                    </Avatar>
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Neon Waves
-                    </span>
-                  </div>
-                  <IconButton
-                    icon={<FeatherMoreVertical />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                </div>
-                <div className="flex w-full items-center justify-center gap-4">
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherHeart />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    124
-                  </Button>
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherMessageCircle />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    18
-                  </Button>
-                  <IconButton
-                    icon={<FeatherBookmark />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
+            {loading ? (
+              <div className="flex w-full h-full items-center justify-center">
+                <span className="text-body font-body text-subtext-color">Loading visualizations...</span>
+              </div>
+            ) : filteredVisualizations.length === 0 ? (
+              <div className="flex w-full h-full items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  <FeatherMusic className="text-heading-1 font-heading-1 text-subtext-color" />
+                  <span className="text-body font-body text-subtext-color">
+                    No visualizations found. Try adjusting your filters.
+                  </span>
                 </div>
               </div>
-              <div className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-neutral-50 px-4 py-4">
-                <div className="flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-sm bg-neutral-100">
-                  <img
-                    className="grow shrink-0 basis-0 self-stretch object-cover"
-                    src="https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                  />
-                </div>
-                <div className="flex w-full items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar
-                      size="small"
-                      image="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    >
-                      SR
-                    </Avatar>
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Pulse Echo
-                    </span>
-                  </div>
-                  <IconButton
-                    icon={<FeatherMoreVertical />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                </div>
-                <div className="flex w-full items-center justify-center gap-4">
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherHeart />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    89
-                  </Button>
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherMessageCircle />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    12
-                  </Button>
-                  <IconButton
-                    icon={<FeatherBookmark />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                </div>
+            ) : (
+              <div className={`w-full items-start gap-6 grid ${
+                viewMode === 'grid' && !expandedVisualizationId ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'
+              }`}>
+                {filteredVisualizations.map(renderVisualizationCard)}
               </div>
-              <div className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-neutral-50 px-4 py-4">
-                <div className="flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-sm bg-neutral-100">
-                  <img
-                    className="grow shrink-0 basis-0 self-stretch object-cover"
-                    src="https://images.unsplash.com/photo-1557683316-973673baf926?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                  />
-                </div>
-                <div className="flex w-full items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar
-                      size="small"
-                      image="https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    >
-                      MK
-                    </Avatar>
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Sonic Drift
-                    </span>
-                  </div>
-                  <IconButton
-                    icon={<FeatherMoreVertical />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                </div>
-                <div className="flex w-full items-center justify-center gap-4">
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherHeart />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    76
-                  </Button>
-                  <Button
-                    variant="neutral-tertiary"
-                    icon={<FeatherMessageCircle />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    8
-                  </Button>
-                  <IconButton
-                    icon={<FeatherBookmark />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-          <div className="flex max-w-[320px] grow shrink-0 basis-0 flex-col items-start gap-6 self-stretch border-l border-solid border-neutral-border px-6 py-6 overflow-auto">
-            <div className="flex w-full flex-col items-start gap-3">
-              <span className="text-body-bold font-body-bold text-default-font">
-                Categories
-              </span>
-              <div className="flex w-full flex-wrap items-start gap-2">
-                <Badge>All</Badge>
-                <Badge variant="neutral">Ambient</Badge>
-                <Badge variant="neutral">Electronic</Badge>
-                <Badge variant="neutral">Hip Hop</Badge>
-                <Badge variant="neutral">Rock</Badge>
-                <Badge variant="neutral" icon={<FeatherPlus />} />
-              </div>
-            </div>
-            <div className="flex w-full flex-col items-start gap-3">
-              <span className="text-body-bold font-body-bold text-default-font">
-                Sort by
-              </span>
-              <ToggleGroup
-                className="h-auto w-full flex-none"
-                value=""
-                onValueChange={(value: string) => {}}
-              >
-                <ToggleGroup.Item icon={null} value="5e2cac3b">
-                  Trending
-                </ToggleGroup.Item>
-                <ToggleGroup.Item icon={null} value="d452097b">
-                  Recent
-                </ToggleGroup.Item>
-                <ToggleGroup.Item icon={null} value="90ebb6f9">
-                  Popular
-                </ToggleGroup.Item>
-              </ToggleGroup>
-            </div>
-            <div className="flex w-full flex-col items-start gap-3">
-              <span className="text-body-bold font-body-bold text-default-font">
-                Duration
-              </span>
-              <Slider
-                value={[50]}
-                onValueChange={(value: number[]) => {}}
-                onValueCommit={(value: number[]) => {}}
-              />
-              <div className="flex w-full items-center justify-between">
-                <span className="text-caption font-caption text-subtext-color">
-                  0:30
-                </span>
-                <span className="text-caption font-caption text-subtext-color">
-                  10:00
-                </span>
-              </div>
-            </div>
-            <div className="flex w-full flex-col items-start gap-3">
-              <span className="text-body-bold font-body-bold text-default-font">
-                Trending Creators
-              </span>
-              <div className="flex w-full flex-col items-start gap-4">
-                <div className="flex w-full items-center gap-4">
-                  <Avatar image="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde">
-                    A
-                  </Avatar>
-                  <div className="flex grow shrink-0 basis-0 flex-col items-start">
+          
+          {/* Filters sidebar */}
+          <div className={`flex flex-col items-start gap-6 self-stretch border-l border-solid border-neutral-border px-6 py-6 overflow-auto transition-all duration-300 ${
+            showFilters ? 'w-[320px] opacity-100' : 'w-0 opacity-0 px-0'
+          }`}>
+            {showFilters && (
+              <>
+                {/* Following filter */}
+                {user && (
+                  <div className="flex w-full items-center justify-between">
                     <span className="text-body-bold font-body-bold text-default-font">
-                      Alex Rivers
+                      Show only following
+                    </span>
+                    <Button
+                      variant={filterByFollowing ? "brand-primary" : "neutral-secondary"}
+                      size="small"
+                      onClick={() => setFilterByFollowing(!filterByFollowing)}
+                    >
+                      {filterByFollowing ? 'On' : 'Off'}
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Categories */}
+                <div className="flex w-full flex-col items-start gap-3">
+                  <span className="text-body-bold font-body-bold text-default-font">
+                    Categories
+                  </span>
+                  <div className="flex w-full flex-wrap items-start gap-2">
+                    {categories.map(cat => (
+                      <Badge
+                        key={cat}
+                        variant={selectedCategory === cat ? "brand" : "neutral"}
+                        onClick={() => setSelectedCategory(cat)}
+                        className="cursor-pointer capitalize"
+                      >
+                        {cat === 'all' ? 'All' : cat.replace('-', ' ')}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Sort by */}
+                <div className="flex w-full flex-col items-start gap-3">
+                  <span className="text-body-bold font-body-bold text-default-font">
+                    Sort by
+                  </span>
+                  <ToggleGroup
+                    className="h-auto w-full flex-none"
+                    value={sortBy}
+                    onValueChange={(value: string) => setSortBy(value as any)}
+                  >
+                    <ToggleGroup.Item icon={null} value="trending">
+                      Trending
+                    </ToggleGroup.Item>
+                    <ToggleGroup.Item icon={null} value="recent">
+                      Recent
+                    </ToggleGroup.Item>
+                    <ToggleGroup.Item icon={null} value="popular">
+                      Popular
+                    </ToggleGroup.Item>
+                  </ToggleGroup>
+                </div>
+                
+                {/* Duration filter */}
+                <div className="flex w-full flex-col items-start gap-3">
+                  <span className="text-body-bold font-body-bold text-default-font">
+                    Duration
+                  </span>
+                  <Slider
+                    value={durationRange}
+                    onValueChange={setDurationRange}
+                  />
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-caption font-caption text-subtext-color">
+                      0:30
                     </span>
                     <span className="text-caption font-caption text-subtext-color">
-                      @alexrivers
+                      10:00
                     </span>
                   </div>
-                  <Button
-                    variant="neutral-primary"
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    Follow
-                  </Button>
                 </div>
-                <div className="flex w-full items-center gap-4">
-                  <Avatar image="https://images.unsplash.com/photo-1494790108377-be9c29b29330">
-                    A
-                  </Avatar>
-                  <div className="flex grow shrink-0 basis-0 flex-col items-start">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Sarah Chen
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      @sarahchen
-                    </span>
+                
+                {/* Trending Creators */}
+                <div className="flex w-full flex-col items-start gap-3">
+                  <span className="text-body-bold font-body-bold text-default-font">
+                    Trending Creators
+                  </span>
+                  <div className="flex w-full flex-col items-start gap-4">
+                    {[
+                      { name: 'Alex Rivers', username: 'alexrivers', avatar: 'A' },
+                      { name: 'Sarah Chen', username: 'sarahchen', avatar: 'S' },
+                      { name: 'Mike Thomson', username: 'mikethomson', avatar: 'M' }
+                    ].map(creator => (
+                      <div key={creator.username} className="flex w-full items-center gap-4">
+                        <Avatar className="cursor-pointer" onClick={() => navigate(`/profile/${creator.username}`)}>
+                          {creator.avatar}
+                        </Avatar>
+                        <div className="flex grow shrink-0 basis-0 flex-col items-start">
+                          <span className="text-body-bold font-body-bold text-default-font">
+                            {creator.name}
+                          </span>
+                          <span className="text-caption font-caption text-subtext-color">
+                            @{creator.username}
+                          </span>
+                        </div>
+                        <Button
+                          variant="neutral-primary"
+                          size="small"
+                          onClick={() => {}}
+                        >
+                          Follow
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                  <Button
-                    variant="neutral-primary"
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    Follow
-                  </Button>
                 </div>
-                <div className="flex w-full items-center gap-4">
-                  <Avatar image="https://images.unsplash.com/photo-1599566150163-29194dcaad36">
-                    A
-                  </Avatar>
-                  <div className="flex grow shrink-0 basis-0 flex-col items-start">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Mike Thomson
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      @mikethomson
-                    </span>
-                  </div>
-                  <Button
-                    variant="neutral-primary"
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  >
-                    Follow
-                  </Button>
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -318,4 +601,4 @@ function CreatorSidebarView() {
   );
 }
 
-export default CreatorSidebarView;
+export default ExplorePage;

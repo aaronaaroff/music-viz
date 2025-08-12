@@ -213,7 +213,7 @@ export async function toggleLike(visualizationId: string) {
     const { error } = await supabase
       .from('likes')
       .delete()
-      .eq('user_id', user.id)
+      .eq('user_id', session.user.id)
       .eq('visualization_id', visualizationId);
     
     return { isLiked: false, error };
@@ -251,7 +251,7 @@ export async function toggleSave(visualizationId: string) {
     const { error } = await supabase
       .from('saves')
       .delete()
-      .eq('user_id', user.id)
+      .eq('user_id', session.user.id)
       .eq('visualization_id', visualizationId);
     
     return { isSaved: false, error };

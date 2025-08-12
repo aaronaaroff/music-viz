@@ -1,19 +1,11 @@
-
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { Button } from "@/ui/components/Button";
 import { FeatherTrendingUp } from "@subframe/core";
-import { FeatherSparkle } from "@subframe/core";
 import { IconButton } from "@/ui/components/IconButton";
-import { FeatherMessageCircle } from "@subframe/core";
-import { FeatherBell } from "@subframe/core";
 import { Avatar } from "@/ui/components/Avatar";
-import { FeatherVerified } from "@subframe/core";
 import { FeatherShare2 } from "@subframe/core";
-import { FeatherYoutube } from "@subframe/core";
-import { FeatherInstagram } from "@subframe/core";
 import { Tabs } from "@/ui/components/Tabs";
-import { FeatherListFilter } from "@subframe/core";
 import { FeatherArrowUpDown } from "@subframe/core";
 import { TextField } from "@/ui/components/TextField";
 import { FeatherSearch } from "@subframe/core";
@@ -22,272 +14,494 @@ import { FeatherLayoutGrid } from "@subframe/core";
 import { FeatherLayoutList } from "@subframe/core";
 import { FeatherPlay } from "@subframe/core";
 import { Badge } from "@/ui/components/Badge";
-import { FeatherChevronLeft } from "@subframe/core";
-import { FeatherCircle } from "@subframe/core";
-import { FeatherChevronRight } from "@subframe/core";
+import { FeatherSettings } from "@subframe/core";
+import { FeatherEdit2 } from "@subframe/core";
+import { FeatherTrash2 } from "@subframe/core";
+import { FeatherImage } from "@subframe/core";
+import { useAuth } from "@/components/auth/AuthContext";
+import { getUserVisualizations, deleteVisualization } from "@/lib/api/visualizations";
+import { useNavigate } from "react-router-dom";
+import type { Database } from "@/lib/database.types";
+
+type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
+  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
+};
 
 function UserProfileHub() {
+  const { user, profile, loading, updateProfile } = useAuth();
+  const navigate = useNavigate();
+  
+  const [activeTab, setActiveTab] = useState<string>("collection");
+  const [visualizations, setVisualizations] = useState<Visualization[]>([]);
+  const [filteredVisualizations, setFilteredVisualizations] = useState<Visualization[]>([]);
+  const [loadingVisualizations, setLoadingVisualizations] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"updated_at" | "created_at" | "title">("updated_at");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  
+  // Profile editing state
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    username: "",
+    bio: ""
+  });
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth/signin');
+    }
+  }, [user, loading, navigate]);
+
+  // Initialize edit form with profile data
+  useEffect(() => {
+    if (profile) {
+      setEditForm({
+        full_name: profile.full_name || "",
+        username: profile.username || "",
+        bio: profile.bio || ""
+      });
+    }
+  }, [profile]);
+
+  // Load user's visualizations
+  useEffect(() => {
+    const loadVisualizations = async () => {
+      if (!user) return;
+      
+      setLoadingVisualizations(true);
+      try {
+        const { data, error } = await getUserVisualizations(user.id, true);
+        if (error) {
+          console.error('Error loading visualizations:', error);
+        } else {
+          setVisualizations(data || []);
+        }
+      } catch (error) {
+        console.error('Error loading visualizations:', error);
+      } finally {
+        setLoadingVisualizations(false);
+      }
+    };
+
+    loadVisualizations();
+  }, [user]);
+
+  // Filter and sort visualizations
+  useEffect(() => {
+    let filtered = [...visualizations];
+    
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(viz => 
+        viz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (viz.description && viz.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+    
+    // Filter by tab
+    if (activeTab === "collection") {
+      // Show all visualizations (both drafts and published)
+    } else if (activeTab === "drafts") {
+      filtered = filtered.filter(viz => viz.is_draft);
+    } else if (activeTab === "published") {
+      filtered = filtered.filter(viz => !viz.is_draft);
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "title":
+          return a.title.localeCompare(b.title);
+        case "created_at":
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        case "updated_at":
+        default:
+          return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+      }
+    });
+    
+    setFilteredVisualizations(filtered);
+  }, [visualizations, searchTerm, activeTab, sortBy]);
+
+  const handleEditProfile = async () => {
+    if (!isEditingProfile) {
+      setIsEditingProfile(true);
+      return;
+    }
+
+    try {
+      const { error } = await updateProfile(editForm);
+      if (error) {
+        console.error('Error updating profile:', error);
+        // You could add a toast notification here
+      } else {
+        setIsEditingProfile(false);
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
+  const handleDeleteVisualization = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this visualization? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await deleteVisualization(id);
+      if (error) {
+        console.error('Error deleting visualization:', error);
+      } else {
+        setVisualizations(prev => prev.filter(viz => viz.id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting visualization:', error);
+    }
+  };
+
+  const handleLoadVisualization = (vizId: string) => {
+    // Navigate to main page with visualization ID as query param
+    navigate(`/?load=${vizId}`);
+  };
+
+  if (loading) {
+    return (
+      <DefaultPageLayout>
+        <div className="flex h-full w-full items-center justify-center">
+          <span className="text-body font-body text-subtext-color">Loading profile...</span>
+        </div>
+      </DefaultPageLayout>
+    );
+  }
+
+  if (!user) {
+    return null; // Will redirect
+  }
+
+  const displayName = profile?.full_name || profile?.username || user.email?.split('@')[0] || 'User';
+  const username = profile?.username || user.email?.split('@')[0] || 'user';
+
   return (
     <DefaultPageLayout>
       <div className="flex h-full w-full flex-col items-start">
+        {/* Top toolbar */}
         <div className="flex w-full items-center justify-end gap-2 border-b border-solid border-neutral-border px-8 py-2">
           <Button
             variant="neutral-tertiary"
             icon={<FeatherTrendingUp />}
-            onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+            onClick={() => navigate('/explore')}
           >
-            128
+            Explore
           </Button>
           <Button
-            variant="brand-tertiary"
-            size="large"
-            icon={<FeatherSparkle />}
-            onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+            variant="brand-secondary"
+            icon={<FeatherSettings />}
+            onClick={handleEditProfile}
+            loading={isEditingProfile && loading}
           >
-            Pro
+            {isEditingProfile ? 'Save Profile' : 'Edit Profile'}
           </Button>
-          <IconButton
-            size="large"
-            icon={<FeatherMessageCircle />}
-            onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-          />
-          <IconButton
-            size="large"
-            icon={<FeatherBell />}
-            onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-          />
         </div>
+        
         <div className="container max-w-none flex w-full grow shrink-0 basis-0 flex-col items-start gap-4 bg-default-background py-12 overflow-auto">
           <div className="flex w-full flex-col items-start gap-12">
+            {/* Profile header */}
             <div className="flex w-full flex-col items-start gap-4 relative">
               <img
                 className="h-60 w-full flex-none rounded-md object-cover"
                 src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
+                alt="Profile banner"
               />
               <div className="flex flex-col items-start gap-4 rounded-full border-2 border-solid border-default-background shadow-lg absolute left-4 -bottom-4">
                 <Avatar
                   size="x-large"
-                  image="https://images.unsplash.com/photo-1520813792240-56fc4a3765a7?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
+                  image={profile?.avatar_url || undefined}
                 >
-                  S
+                  {displayName.charAt(0).toUpperCase()}
                 </Avatar>
               </div>
             </div>
+            
             <div className="flex w-full flex-col items-start gap-6">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-heading-1 font-heading-1 text-default-font">
-                    SoundScape
-                  </span>
-                  <FeatherVerified className="text-heading-2 font-heading-2 text-brand-700" />
+              {/* Profile info section */}
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="flex flex-col items-start gap-2 flex-1 min-w-0">
+                  {isEditingProfile ? (
+                    <div className="flex flex-col gap-4 w-full max-w-md">
+                      <TextField label="Full Name" helpText="">
+                        <TextField.Input
+                          placeholder="Your full name"
+                          value={editForm.full_name}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                            setEditForm(prev => ({ ...prev, full_name: e.target.value }))}
+                        />
+                      </TextField>
+                      <TextField label="Username" helpText="">
+                        <TextField.Input
+                          placeholder="Your username"
+                          value={editForm.username}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                            setEditForm(prev => ({ ...prev, username: e.target.value }))}
+                        />
+                      </TextField>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-heading-1 font-heading-1 text-default-font">
+                        {displayName}
+                      </span>
+                      {profile?.username && (
+                        <span className="text-body font-body text-subtext-color">
+                          @{profile.username}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {profile?.bio && !isEditingProfile && (
+                    <span className="text-body font-body text-subtext-color">
+                      {profile.bio}
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center">
+                
+                <div className="flex items-center gap-2">
                   <IconButton
                     icon={<FeatherShare2 />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                  <IconButton
-                    icon={<FeatherYoutube />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                  />
-                  <IconButton
-                    icon={<FeatherInstagram />}
-                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                    onClick={() => {
+                      if (navigator.share) {
+                        navigator.share({
+                          title: `${displayName}'s Profile`,
+                          url: window.location.href
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
+              
+              {/* Stats */}
               <div className="flex flex-wrap items-start gap-12">
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
                     Visualizations
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    248
+                    {visualizations.length}
                   </span>
                 </div>
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Followers
+                    Published
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    1.2k
+                    {visualizations.filter(v => !v.is_draft).length}
                   </span>
                 </div>
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Downloads
+                    Drafts
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    3.4k
+                    {visualizations.filter(v => v.is_draft).length}
                   </span>
                 </div>
               </div>
             </div>
           </div>
+          
+          {/* Visualizations section */}
           <div className="flex w-full flex-col items-start gap-6">
             <Tabs>
-              <Tabs.Item active={true}>Collection</Tabs.Item>
-              <Tabs.Item>Favorites</Tabs.Item>
-              <Tabs.Item>Activity</Tabs.Item>
+              <Tabs.Item 
+                active={activeTab === "collection"}
+                onClick={() => setActiveTab("collection")}
+              >
+                All ({visualizations.length})
+              </Tabs.Item>
+              <Tabs.Item 
+                active={activeTab === "published"}
+                onClick={() => setActiveTab("published")}
+              >
+                Published ({visualizations.filter(v => !v.is_draft).length})
+              </Tabs.Item>
+              <Tabs.Item 
+                active={activeTab === "drafts"}
+                onClick={() => setActiveTab("drafts")}
+              >
+                Drafts ({visualizations.filter(v => v.is_draft).length})
+              </Tabs.Item>
             </Tabs>
-            <div className="flex w-full flex-wrap items-center justify-between">
+            
+            {/* Controls */}
+            <div className="flex w-full flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <Button
                   variant="neutral-secondary"
-                  icon={<FeatherListFilter />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                >
-                  Filter
-                </Button>
-                <Button
-                  variant="neutral-secondary"
                   icon={<FeatherArrowUpDown />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                  onClick={() => {
+                    const nextSort = sortBy === "updated_at" ? "created_at" : 
+                                   sortBy === "created_at" ? "title" : "updated_at";
+                    setSortBy(nextSort);
+                  }}
                 >
-                  Sort by plays
+                  Sort by {sortBy === "updated_at" ? "updated" : 
+                           sortBy === "created_at" ? "created" : "title"}
                 </Button>
               </div>
+              
               <div className="flex items-center gap-4">
                 <TextField label="" helpText="" icon={<FeatherSearch />}>
                   <TextField.Input
                     placeholder="Search visualizations"
-                    value=""
-                    onChange={(
-                      event: React.ChangeEvent<HTMLInputElement>
-                    ) => {}}
+                    value={searchTerm}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                      setSearchTerm(e.target.value)}
                   />
                 </TextField>
-                <ToggleGroup value="" onValueChange={(value: string) => {}}>
+                <ToggleGroup 
+                  value={viewMode} 
+                  onValueChange={(value: string) => setViewMode(value as "grid" | "list")}
+                >
                   <ToggleGroup.Item
                     icon={<FeatherLayoutGrid />}
-                    value="8b28fa1c"
+                    value="grid"
                   >
                     Grid
                   </ToggleGroup.Item>
                   <ToggleGroup.Item
                     icon={<FeatherLayoutList />}
-                    value="61fcd3f2"
+                    value="list"
                   >
-                    Carousel
+                    List
                   </ToggleGroup.Item>
                 </ToggleGroup>
               </div>
             </div>
-            <div className="flex w-full items-start pb-4 overflow-auto">
-              <div className="flex items-start gap-4">
-                <div className="flex w-96 flex-none flex-col items-start overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm">
-                  <div className="flex w-full grow shrink-0 basis-0 flex-col items-start relative">
-                    <img
-                      className="h-60 w-full flex-none border-b border-solid border-neutral-border object-cover"
-                      src="https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    />
-                    <IconButton
-                      className="absolute right-2 top-2"
-                      variant="inverse"
-                      icon={<FeatherPlay />}
-                      onClick={(
-                        event: React.MouseEvent<HTMLButtonElement>
-                      ) => {}}
-                    />
+            
+            {/* Visualizations grid */}
+            {loadingVisualizations ? (
+              <div className="flex w-full items-center justify-center py-12">
+                <span className="text-body font-body text-subtext-color">Loading visualizations...</span>
+              </div>
+            ) : filteredVisualizations.length === 0 ? (
+              <div className="flex w-full items-center justify-center py-12">
+                <div className="flex flex-col items-center gap-4">
+                  <FeatherImage className="text-heading-1 font-heading-1 text-subtext-color" />
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-body-bold font-body-bold text-default-font">
+                      {searchTerm ? 'No matching visualizations' : 'No visualizations yet'}
+                    </span>
+                    <span className="text-body font-body text-subtext-color text-center">
+                      {searchTerm 
+                        ? 'Try adjusting your search or filter criteria'
+                        : 'Create your first visualization to get started!'
+                      }
+                    </span>
                   </div>
-                  <div className="flex w-full flex-col items-start gap-1 px-4 py-4">
-                    <div className="flex w-full items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-body-bold font-body-bold text-default-font">
-                          Neon Waves
-                        </span>
-                        <Badge>New</Badge>
-                      </div>
-                      <span className="text-caption font-caption text-subtext-color">
-                        2.1k plays
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex w-96 flex-none flex-col items-start overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm">
-                  <div className="flex w-full grow shrink-0 basis-0 flex-col items-start relative">
-                    <img
-                      className="h-60 w-full flex-none border-b border-solid border-neutral-border object-cover"
-                      src="https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    />
-                    <IconButton
-                      className="absolute right-2 top-2"
-                      variant="inverse"
-                      icon={<FeatherPlay />}
-                      onClick={(
-                        event: React.MouseEvent<HTMLButtonElement>
-                      ) => {}}
-                    />
-                  </div>
-                  <div className="flex w-full flex-col items-start gap-1 px-4 py-4">
-                    <div className="flex w-full items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-body-bold font-body-bold text-default-font">
-                          Pulse Echo
-                        </span>
-                        <Badge variant="success">Trending</Badge>
-                      </div>
-                      <span className="text-caption font-caption text-subtext-color">
-                        4.5k plays
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex w-96 flex-none flex-col items-start overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm">
-                  <div className="flex w-full grow shrink-0 basis-0 flex-col items-start relative">
-                    <img
-                      className="h-60 w-full flex-none border-b border-solid border-neutral-border object-cover"
-                      src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                    />
-                    <IconButton
-                      className="absolute right-2 top-2"
-                      variant="inverse"
-                      icon={<FeatherPlay />}
-                      onClick={(
-                        event: React.MouseEvent<HTMLButtonElement>
-                      ) => {}}
-                    />
-                  </div>
-                  <div className="flex w-full flex-col items-start gap-1 px-4 py-4">
-                    <div className="flex w-full items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-body-bold font-body-bold text-default-font">
-                          Sonic Prism
-                        </span>
-                      </div>
-                      <span className="text-caption font-caption text-subtext-color">
-                        1.8k plays
-                      </span>
-                    </div>
-                  </div>
+                  {!searchTerm && (
+                    <Button
+                      variant="brand-primary"
+                      onClick={() => navigate('/')}
+                    >
+                      Create Visualization
+                    </Button>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="flex w-full items-center justify-center gap-2">
-              <IconButton
-                icon={<FeatherChevronLeft />}
-                onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-              />
-              <div className="flex items-center gap-1">
-                <IconButton
-                  variant="brand-primary"
-                  icon={<FeatherCircle />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                />
-                <IconButton
-                  icon={<FeatherCircle />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                />
-                <IconButton
-                  icon={<FeatherCircle />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                />
+            ) : (
+              <div className={`w-full ${
+                viewMode === "grid" 
+                  ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+                  : "flex flex-col gap-4"
+              }`}>
+                {filteredVisualizations.map((viz) => (
+                  <div
+                    key={viz.id}
+                    className={`${
+                      viewMode === "grid"
+                        ? "flex flex-col overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm"
+                        : "flex items-center gap-4 p-4 rounded-md border border-solid border-neutral-border bg-default-background shadow-sm"
+                    }`}
+                  >
+                    {/* Visualization preview */}
+                    <div className={`${
+                      viewMode === "grid" 
+                        ? "relative w-full h-48 bg-black rounded-t-md" 
+                        : "relative w-24 h-24 bg-black rounded-md flex-shrink-0"
+                    }`}>
+                      {/* Placeholder for visualization preview */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <FeatherImage className="text-subtext-color text-2xl" />
+                      </div>
+                      <div className="absolute top-2 right-2 flex gap-2">
+                        <IconButton
+                          size="small"
+                          variant="inverse"
+                          icon={<FeatherPlay />}
+                          onClick={() => handleLoadVisualization(viz.id)}
+                        />
+                        <IconButton
+                          size="small"
+                          variant="inverse"
+                          icon={<FeatherTrash2 />}
+                          onClick={() => handleDeleteVisualization(viz.id)}
+                        />
+                      </div>
+                      {viz.is_draft && (
+                        <Badge className="absolute bottom-2 left-2" variant="neutral">
+                          Draft
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {/* Visualization info */}
+                    <div className={`${
+                      viewMode === "grid" 
+                        ? "flex w-full flex-col gap-2 p-4" 
+                        : "flex flex-col gap-1 flex-1 min-w-0"
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-body-bold font-body-bold text-default-font truncate">
+                          {viz.title}
+                        </span>
+                        {viewMode === "list" && (
+                          <div className="flex gap-1 flex-shrink-0">
+                            <IconButton
+                              size="small"
+                              icon={<FeatherEdit2 />}
+                              onClick={() => handleLoadVisualization(viz.id)}
+                            />
+                            <IconButton
+                              size="small"
+                              icon={<FeatherTrash2 />}
+                              onClick={() => handleDeleteVisualization(viz.id)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
+                      {viz.description && (
+                        <span className="text-caption font-caption text-subtext-color line-clamp-2">
+                          {viz.description}
+                        </span>
+                      )}
+                      
+                      <div className="flex items-center justify-between text-caption font-caption text-subtext-color">
+                        <span>
+                          {viz.audio_file_name || 'No audio file'}
+                        </span>
+                        <span>
+                          {new Date(viz.updated_at || viz.created_at || '').toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <IconButton
-                icon={<FeatherChevronRight />}
-                onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-              />
-            </div>
+            )}
           </div>
         </div>
       </div>

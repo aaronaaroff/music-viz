@@ -120,13 +120,11 @@ const SidebarCollapsibleRoot = React.forwardRef<
             {header}
           </div>
         ) : null}
-        {children ? (
-          <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-1 px-3 py-4 overflow-y-auto overflow-x-visible">
-            {children}
-          </div>
-        ) : null}
+        <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-1 px-3 overflow-y-auto overflow-x-visible">
+          {children}
+        </div>
         {footer ? (
-          <div className="flex w-full items-center gap-4 overflow-hidden border-t border-solid border-neutral-border px-4 py-3">
+          <div className="flex w-full items-center gap-4 overflow-hidden border-t border-solid border-neutral-border px-4 py-3 h-[72px]">
             {React.isValidElement(footer) 
               ? React.cloneElement(footer as React.ReactElement<any>, {
                   onDropdownOpenChange: setIsDropdownOpen

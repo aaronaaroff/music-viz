@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { Button } from "@/ui/components/Button";
 import { FeatherSave } from "@subframe/core";
 import { FeatherExpand } from "@subframe/core";
+import { FeatherPlus } from "@subframe/core";
 import { Select } from "@/ui/components/Select";
 import { FeatherMusic } from "@subframe/core";
 import { IconButton } from "@/ui/components/IconButton";
@@ -36,6 +37,7 @@ import { getNextDraftNumber } from "@/lib/api/visualizations";
 import { robustCreateVisualization, robustUpdateVisualization } from "@/lib/api/robustOperations";
 import { supabase } from "@/lib/supabase";
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
+import { useLocation, useNavigate } from "react-router-dom";
 
 function MusicVizUpload() {
   const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
@@ -68,26 +70,184 @@ function MusicVizUpload() {
   const { state, setSource, startAnalysis, stopAnalysis, setVolume } = useAudioManager();
   const { user } = useAuth();
   const { saveSession, loadSession, clearSession } = useSessionPersistence();
+  const location = useLocation();
+  const navigate = useNavigate();
   
-  // Load saved session on mount
-  useEffect(() => {
-    const savedSession = loadSession();
-    if (savedSession) {
-      console.log('Restoring saved session:', savedSession);
-      
-      // Restore visualization state
-      if (savedSession.visualizationId) {
-        setCurrentVisualizationId(savedSession.visualizationId);
+  // Visualization system
+  const {
+    settings: visualizationSettings,
+    updateSettings,
+    setVisualizationType,
+    setColorTheme,
+    setSensitivity,
+    setSmoothing,
+    setSizeScale,
+    setParticleCount,
+    setGlowIntensity,
+    setBackgroundOpacity,
+    setRotationSpeed,
+    togglePulseBeatSync,
+    toggleFlashOnset,
+    loadPreset,
+  } = useVisualization();
+  
+  const {
+    activeNote,
+    startKeyboard,
+    stopKeyboard,
+    handleNoteOn,
+    handleNoteOff,
+  } = useKeyboardInput();
+  
+  const handleCreateNew = useCallback(() => {
+    if (user) {
+      const shouldSave = window.confirm("Would you like to save your current project before creating a new one?");
+      if (shouldSave) {
+        return; // User can save manually and then click Create New again
       }
-      if (savedSession.visualizationName) {
-        setVisualizationName(savedSession.visualizationName);
-      }
-      if (savedSession.audioSource?.fileName) {
-        setUploadedFileName(savedSession.audioSource.fileName);
-      }
-      // Settings will be restored after visualization hook is initialized
     }
-  }, [loadSession]);
+    
+    // Navigate to main page with new project parameter
+    navigate('/?new=true');
+  }, [user, navigate]);
+  
+  // Load saved session on mount or load visualization from URL
+  useEffect(() => {
+    const handleInitialLoad = async () => {
+      // Check for load parameter in URL
+      const urlParams = new URLSearchParams(location.search);
+      const loadVisualizationId = urlParams.get('load');
+      const shouldCreateNew = urlParams.get('new') === 'true';
+      
+      if (loadVisualizationId && user) {
+        try {
+          console.log('Loading visualization from URL:', loadVisualizationId);
+          
+          // Fetch the visualization from database
+          const { data: visualization, error } = await supabase
+            .from('visualizations')
+            .select('*')
+            .eq('id', loadVisualizationId)
+            .eq('user_id', user.id) // Only load user's own visualizations
+            .single();
+          
+          if (error) {
+            console.error('Error loading visualization:', error);
+            setSaveStatus({ type: 'error', message: 'Failed to load visualization' });
+          } else if (visualization) {
+            console.log('Loaded visualization:', visualization);
+            
+            // Clear any existing session first
+            clearSession();
+            
+            // Load the visualization data
+            setCurrentVisualizationId(visualization.id);
+            setVisualizationName(visualization.title);
+            
+            if (visualization.audio_file_name) {
+              setUploadedFileName(visualization.audio_file_name);
+            }
+            
+            // Save as current session
+            saveSession({
+              visualizationId: visualization.id,
+              visualizationName: visualization.title,
+              settings: visualization.settings,
+              audioSource: visualization.audio_file_name ? {
+                type: 'file' as any,
+                fileName: visualization.audio_file_name
+              } : undefined
+            });
+            
+            setSaveStatus({ type: 'success', message: 'Visualization loaded successfully!' });
+            
+            // Clear the URL parameter
+            window.history.replaceState({}, '', '/');
+          }
+        } catch (error) {
+          console.error('Error loading visualization:', error);
+          setSaveStatus({ type: 'error', message: 'Failed to load visualization' });
+        }
+      } else if (shouldCreateNew) {
+        // Create new project - inline logic to avoid dependency issues
+        clearSession();
+        setCurrentVisualizationId(null);
+        setUploadedFileName("");
+        setCurrentTime(0);
+        setDuration(0);
+        setUploadFeedback({ type: null, message: "" });
+        setSaveStatus({ type: null, message: "" });
+        setCurrentSourceType(AudioSourceType.FILE);
+        
+        // Stop any current audio
+        if (state.source) {
+          stopAnalysis();
+          setSource(null);
+        }
+        
+        // Generate unique name for new project
+        if (user) {
+          try {
+            const nextNumber = await getNextDraftNumber(user.id);
+            setVisualizationName(`Visualization ${nextNumber}`);
+          } catch (error) {
+            console.error('Error getting next draft number:', error);
+            setVisualizationName(`Visualization ${Date.now()}`);
+          }
+        } else {
+          setVisualizationName("Visualization 1");
+        }
+        
+        // Reset visualization settings if available
+        if (updateSettings) {
+          updateSettings({
+            type: VisualizationType.CIRCLE,
+            colorTheme: ColorTheme.NEON,
+            intensity: 0.5,
+            speed: 0.5,
+            scale: 0.5,
+            blur: 0,
+            brightness: 1,
+            contrast: 1,
+            saturation: 1,
+            particleCount: 100,
+            particleSize: 2,
+            particleSpeed: 0.5,
+            trailLength: 0.3,
+            enableBeatDetection: true,
+            beatSensitivity: 0.5,
+            enableOnsetAnalysis: true,
+            onsetSensitivity: 0.5
+          });
+        }
+        
+        // Clean up URL by removing the new parameter
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('new');
+        window.history.replaceState({}, '', newUrl.toString());
+      } else {
+        // No URL parameter, try to load saved session
+        const savedSession = loadSession();
+        if (savedSession) {
+          console.log('Restoring saved session:', savedSession);
+          
+          // Restore visualization state
+          if (savedSession.visualizationId) {
+            setCurrentVisualizationId(savedSession.visualizationId);
+          }
+          if (savedSession.visualizationName) {
+            setVisualizationName(savedSession.visualizationName);
+          }
+          if (savedSession.audioSource?.fileName) {
+            setUploadedFileName(savedSession.audioSource.fileName);
+          }
+          // Settings will be restored after visualization hook is initialized
+        }
+      }
+    };
+    
+    handleInitialLoad();
+  }, [location.search, user]);
 
   // Initialize draft number when user is available
   useEffect(() => {
@@ -107,31 +267,15 @@ function MusicVizUpload() {
     initializeDraftNumber();
   }, [user, loadSession]);
   
-  // Visualization system
-  const {
-    settings: visualizationSettings,
-    updateSettings,
-    setVisualizationType,
-    setColorTheme,
-    setSensitivity,
-    setSmoothing,
-    setSizeScale,
-    setParticleCount,
-    setGlowIntensity,
-    setBackgroundOpacity,
-    setRotationSpeed,
-    togglePulseBeatSync,
-    toggleFlashOnset,
-    loadPreset,
-  } = useVisualization();
 
-  // Restore visualization settings from saved session
+  // Restore visualization settings from saved session or loaded visualization
   useEffect(() => {
     const savedSession = loadSession();
     if (savedSession?.settings && updateSettings) {
+      console.log('Restoring settings from session:', savedSession.settings);
       updateSettings(savedSession.settings);
     }
-  }, [updateSettings, loadSession]);
+  }, [updateSettings, loadSession, currentVisualizationId]);
 
   // Auto-save session state
   useEffect(() => {
@@ -173,10 +317,6 @@ function MusicVizUpload() {
     keyboardSourceRef.current = new KeyboardSource(audioContext);
   }
 
-  const { playNote, stopNote, getActiveNotes, getKeyboardMapping } = useKeyboardInput(
-    keyboardSourceRef.current,
-    currentSourceType === AudioSourceType.KEYBOARD
-  );
 
   const handleSourceChange = async (sourceType: AudioSourceType) => {
     // Stop current analysis
@@ -337,8 +477,8 @@ function MusicVizUpload() {
     }
   };
 
-  const activeNotes = getActiveNotes();
-  const keyboardMapping = getKeyboardMapping();
+  const activeNotes = activeNote ? [activeNote] : [];
+  const keyboardMapping = {}; // Default empty mapping for now
 
   // Cleanup time tracking on unmount
   useEffect(() => {
@@ -346,18 +486,6 @@ function MusicVizUpload() {
       stopTimeTracking();
     };
   }, []);
-
-  // Generate next available draft number
-  const getNextDraftNumber = (): number => {
-    // In a real app, this would check against saved drafts
-    // For now, we'll simulate checking localStorage or a database
-    const existingDrafts = [1, 2]; // Simulate existing drafts
-    let nextNumber = 1;
-    while (existingDrafts.includes(nextNumber)) {
-      nextNumber++;
-    }
-    return nextNumber;
-  };
 
   // Handle name editing
   const handleNameClick = () => {
@@ -467,6 +595,7 @@ function MusicVizUpload() {
     }
   };
 
+
   return (
     <DefaultPageLayout>
       <div className="container max-w-none flex h-full w-full flex-col items-start gap-8 bg-default-background py-12">
@@ -516,6 +645,13 @@ function MusicVizUpload() {
               disabled={isSaving}
             >
               {currentVisualizationId ? 'Update' : 'Save draft'}
+            </Button>
+            <Button
+              variant="neutral-tertiary"
+              icon={<FeatherPlus />}
+              onClick={handleCreateNew}
+            >
+              Create New
             </Button>
             <Button
               variant="destructive-secondary"
@@ -649,8 +785,8 @@ function MusicVizUpload() {
                 <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-success-600 px-6 py-12">
                   <KeyboardInput
                     activeNotes={activeNotes}
-                    onNoteStart={playNote}
-                    onNoteStop={stopNote}
+                    onNoteStart={handleNoteOn}
+                    onNoteStop={handleNoteOff}
                     keyboardMapping={keyboardMapping}
                     className="w-full"
                   />
