@@ -23,7 +23,7 @@ import { FeatherUser } from "@subframe/core";
 import { FeatherPlay } from "@subframe/core";
 import { FeatherMusic } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getPublicVisualizations, toggleLike, toggleSave } from "@/lib/api/visualizations";
+import { getPublicVisualizations, toggleLike, toggleSave, createComment, getVisualizationComments } from "@/lib/api/visualizations";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
 
@@ -35,18 +35,13 @@ type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
   comments_count?: number;
 };
 
-interface Comment {
-  id: string;
-  user_id: string;
-  visualization_id: string;
-  content: string;
-  created_at: string;
-  user: {
-    username: string;
-    full_name: string;
+type Comment = Database['public']['Tables']['comments']['Row'] & {
+  profiles?: {
+    username: string | null;
+    full_name: string | null;
     avatar_url: string | null;
-  };
-}
+  } | null;
+};
 
 function ExplorePage() {
   const { user } = useAuth();
@@ -194,64 +189,56 @@ function ExplorePage() {
       setExpandedVisualizationId(null);
     } else {
       setExpandedVisualizationId(visualizationId);
-      // Load comments (mock for now)
+      // Load comments from database
       if (!comments[visualizationId]) {
-        setComments(prev => ({
-          ...prev,
-          [visualizationId]: [
-            {
-              id: '1',
-              user_id: '1',
-              visualization_id: visualizationId,
-              content: 'Amazing visualization! The colors sync perfectly with the beat.',
-              created_at: new Date().toISOString(),
-              user: {
-                username: 'musiclover',
-                full_name: 'Music Lover',
-                avatar_url: null
-              }
-            },
-            {
-              id: '2',
-              user_id: '2',
-              visualization_id: visualizationId,
-              content: 'How did you get the particles to react so smoothly?',
-              created_at: new Date(Date.now() - 3600000).toISOString(),
-              user: {
-                username: 'visualartist',
-                full_name: 'Visual Artist',
-                avatar_url: null
-              }
-            }
-          ]
-        }));
+        const { data, error } = await getVisualizationComments(visualizationId);
+        if (!error && data) {
+          setComments(prev => ({
+            ...prev,
+            [visualizationId]: data
+          }));
+        }
       }
     }
   };
   
   // Handle add comment
-  const handleAddComment = (visualizationId: string) => {
+  const handleAddComment = async (visualizationId: string) => {
     if (!user || !newComment.trim()) return;
     
-    const comment: Comment = {
-      id: Date.now().toString(),
-      user_id: user.id,
-      visualization_id: visualizationId,
-      content: newComment,
-      created_at: new Date().toISOString(),
-      user: {
-        username: user.email?.split('@')[0] || 'user',
-        full_name: user.email?.split('@')[0] || 'User',
-        avatar_url: null
+    try {
+      const { data, error } = await createComment(visualizationId, newComment);
+      
+      if (error) {
+        console.error('Error creating comment:', error);
+        // TODO: Show error toast
+        return;
       }
-    };
-    
-    setComments(prev => ({
-      ...prev,
-      [visualizationId]: [comment, ...(prev[visualizationId] || [])]
-    }));
-    
-    setNewComment("");
+      
+      if (data) {
+        // Add the new comment to the local state
+        setComments(prev => ({
+          ...prev,
+          [visualizationId]: [data, ...(prev[visualizationId] || [])]
+        }));
+        
+        // Clear the input
+        setNewComment("");
+        
+        // Update the comment count on the visualization
+        setVisualizations(prev => prev.map(viz => {
+          if (viz.id === visualizationId) {
+            return {
+              ...viz,
+              comments_count: (viz.comments_count || 0) + 1
+            };
+          }
+          return viz;
+        }));
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+    }
   };
   
   const renderVisualizationCard = (viz: Visualization) => {
@@ -381,17 +368,17 @@ function ExplorePage() {
                 </div>
               )}
               
-              {/* Comments list */}
-              <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto">
+              {/* Comments list with max height for scrolling */}
+              <div className="flex flex-col gap-3 max-h-[200px] overflow-y-auto pr-2">
                 {comments[viz.id]?.map(comment => (
                   <div key={comment.id} className="flex gap-3">
                     <Avatar size="small">
-                      {comment.user.username[0].toUpperCase()}
+                      {(comment.profiles?.username?.[0] || comment.profiles?.full_name?.[0] || 'U').toUpperCase()}
                     </Avatar>
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-baseline gap-2">
                         <span className="text-body-bold font-body-bold text-default-font">
-                          {comment.user.full_name}
+                          {comment.profiles?.full_name || comment.profiles?.username || 'Anonymous'}
                         </span>
                         <span className="text-caption font-caption text-subtext-color">
                           {new Date(comment.created_at).toLocaleDateString()}

@@ -364,3 +364,80 @@ export function generateShareableUrl(visualizationId: string): string {
   const baseUrl = window.location.origin;
   return `${baseUrl}/?load=${visualizationId}`;
 }
+
+// Create a comment on a visualization
+export async function createComment(visualizationId: string, content: string) {
+  // Get fresh session to ensure we have current auth state
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { data: null, error: { message: 'User not authenticated' } };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('comments')
+      .insert({
+        user_id: session.user.id,
+        visualization_id: visualizationId,
+        content: content.trim()
+      })
+      .select(`
+        *,
+        profiles:user_id (
+          username,
+          full_name,
+          avatar_url
+        )
+      `)
+      .single();
+
+    if (error) {
+      console.error('Error creating comment:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error creating comment:', error);
+    return { data: null, error: { message: 'Failed to create comment' } };
+  }
+}
+
+// Get comments for a visualization
+export async function getVisualizationComments(visualizationId: string) {
+  const { data, error } = await supabase
+    .from('comments')
+    .select(`
+      *,
+      profiles:user_id (
+        username,
+        full_name,
+        avatar_url
+      )
+    `)
+    .eq('visualization_id', visualizationId)
+    .order('created_at', { ascending: false });
+
+  return {
+    data: data || [],
+    error
+  };
+}
+
+// Delete a comment
+export async function deleteComment(commentId: string) {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { error: { message: 'User not authenticated' } };
+  }
+
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId)
+    .eq('user_id', session.user.id); // Only allow users to delete their own comments
+
+  return { error };
+}
