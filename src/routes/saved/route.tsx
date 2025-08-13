@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Popover, PopoverItem, PopoverLabel, PopoverSeparator } from "@/components/Popover";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { TextField } from "@/ui/components/TextField";
 import { FeatherSearch } from "@subframe/core";
@@ -29,7 +30,6 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { getSavedVisualizations, toggleSave } from "@/lib/api/visualizations";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
-import { DropdownMenu } from "@/ui/components/DropdownMenu";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
   profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
@@ -246,35 +246,38 @@ function SavedPage() {
             </div>
           )}
           <div className="absolute top-2 right-2">
-            <DropdownMenu>
-              <DropdownMenu.Trigger asChild>
+            <Popover
+              trigger={
                 <IconButton
                   variant="inverse"
                   size="small"
                   icon={<FeatherMoreVertical />}
                 />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content>
-                <DropdownMenu.Label>Add to folder</DropdownMenu.Label>
-                {folders.filter(f => f.id !== 'all').map(folder => (
-                  <DropdownMenu.Item
-                    key={folder.id}
-                    onClick={() => addToFolder(viz.id, folder.id)}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span>{folder.name}</span>
-                      {folder.visualizationIds.includes(viz.id) && (
-                        <FeatherCheck className="text-success-600" />
-                      )}
-                    </div>
-                  </DropdownMenu.Item>
-                ))}
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item onClick={() => handleUnsave(viz.id)}>
-                  <span className="text-error-600">Remove from saved</span>
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu>
+              }
+              position="bottom-left"
+            >
+              <PopoverLabel>Add to folder</PopoverLabel>
+              {folders.filter(f => f.id !== 'all').map(folder => (
+                <PopoverItem
+                  key={folder.id}
+                  onClick={() => addToFolder(viz.id, folder.id)}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span>{folder.name}</span>
+                    {folder.visualizationIds.includes(viz.id) && (
+                      <FeatherCheck className="text-success-600" />
+                    )}
+                  </div>
+                </PopoverItem>
+              ))}
+              <PopoverSeparator />
+              <PopoverItem
+                onClick={() => handleUnsave(viz.id)}
+                variant="danger"
+              >
+                Remove from saved
+              </PopoverItem>
+            </Popover>
           </div>
         </div>
         

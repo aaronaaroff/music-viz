@@ -104,9 +104,9 @@ function UserProfileHub() {
     if (activeTab === "collection") {
       // Show all visualizations (both drafts and published)
     } else if (activeTab === "drafts") {
-      filtered = filtered.filter(viz => viz.is_draft);
+      filtered = filtered.filter(viz => !viz.is_public);
     } else if (activeTab === "published") {
-      filtered = filtered.filter(viz => !viz.is_draft);
+      filtered = filtered.filter(viz => viz.is_public);
     }
     
     // Sort
@@ -297,7 +297,7 @@ function UserProfileHub() {
                     Published
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.filter(v => !v.is_draft).length}
+                    {visualizations.filter(v => v.is_public).length}
                   </span>
                 </div>
                 <div className="flex flex-col items-start">
@@ -305,7 +305,7 @@ function UserProfileHub() {
                     Drafts
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.filter(v => v.is_draft).length}
+                    {visualizations.filter(v => !v.is_public).length}
                   </span>
                 </div>
               </div>
@@ -325,13 +325,13 @@ function UserProfileHub() {
                 active={activeTab === "published"}
                 onClick={() => setActiveTab("published")}
               >
-                Published ({visualizations.filter(v => !v.is_draft).length})
+                Published ({visualizations.filter(v => v.is_public).length})
               </Tabs.Item>
               <Tabs.Item 
                 active={activeTab === "drafts"}
                 onClick={() => setActiveTab("drafts")}
               >
-                Drafts ({visualizations.filter(v => v.is_draft).length})
+                Drafts ({visualizations.filter(v => !v.is_public).length})
               </Tabs.Item>
             </Tabs>
             
@@ -450,7 +450,7 @@ function UserProfileHub() {
                           onClick={() => handleDeleteVisualization(viz.id)}
                         />
                       </div>
-                      {viz.is_draft && (
+                      {!viz.is_public && (
                         <Badge className="absolute bottom-2 left-2" variant="neutral">
                           Draft
                         </Badge>

@@ -33,11 +33,10 @@ export async function getPublicVisualizations(
         full_name,
         avatar_url
       ),
-      user_liked:likes!inner (user_id),
-      user_saved:saves!inner (user_id)
+      user_liked:likes(user_id),
+      user_saved:saves(user_id)
     `)
     .eq('is_public', true)
-    .eq('is_draft', false)
     .range(page * limit, (page + 1) * limit - 1);
 
   if (category && category !== 'all') {
@@ -72,7 +71,7 @@ export async function getUserVisualizations(userId: string, includeDrafts = true
     .order('updated_at', { ascending: false });
 
   if (!includeDrafts) {
-    query = query.eq('is_draft', false);
+    query = query.eq('is_public', true);
   }
 
   const { data, error } = await query;
@@ -296,4 +295,72 @@ export async function getNextDraftNumber(userId: string): Promise<number> {
   }
 
   return draftNumbers.length + 1;
+}
+
+// Share a visualization (make it public)
+export async function shareVisualization(visualizationId: string) {
+  // Get fresh session to ensure we have current auth state
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { data: null, error: { message: 'User not authenticated' } };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('visualizations')
+      .update({ 
+        is_public: true
+      })
+      .eq('id', visualizationId)
+      .eq('user_id', session.user.id) // Only allow user to share their own visualizations
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error sharing visualization:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error sharing visualization:', error);
+    return { data: null, error: { message: 'Failed to share visualization' } };
+  }
+}
+
+// Unshare a visualization (make it private)
+export async function unshareVisualization(visualizationId: string) {
+  // Get fresh session to ensure we have current auth state
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { data: null, error: { message: 'User not authenticated' } };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('visualizations')
+      .update({ is_public: false })
+      .eq('id', visualizationId)
+      .eq('user_id', session.user.id) // Only allow user to unshare their own visualizations
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error unsharing visualization:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error unsharing visualization:', error);
+    return { data: null, error: { message: 'Failed to unshare visualization' } };
+  }
+}
+
+// Generate a shareable URL for a visualization
+export function generateShareableUrl(visualizationId: string): string {
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/?load=${visualizationId}`;
 }

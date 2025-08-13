@@ -4,6 +4,10 @@ import { Button } from "@/ui/components/Button";
 import { FeatherSave } from "@subframe/core";
 import { FeatherExpand } from "@subframe/core";
 import { FeatherPlus } from "@subframe/core";
+import { FeatherShare } from "@subframe/core";
+import { FeatherLink } from "@subframe/core";
+import { FeatherGlobe } from "@subframe/core";
+import { Popover, PopoverItem } from "@/components/Popover";
 import { Select } from "@/ui/components/Select";
 import { FeatherMusic } from "@subframe/core";
 import { IconButton } from "@/ui/components/IconButton";
@@ -33,7 +37,7 @@ import { KeyboardSource } from "@/audio/sources/KeyboardSource";
 import { VisualizationCanvas } from "@/visualizers/VisualizationCanvas";
 import { VisualizationType, ColorTheme } from "@/visualizers/types";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getNextDraftNumber } from "@/lib/api/visualizations";
+import { getNextDraftNumber, shareVisualization, unshareVisualization, generateShareableUrl } from "@/lib/api/visualizations";
 import { robustCreateVisualization, robustUpdateVisualization } from "@/lib/api/robustOperations";
 import { supabase } from "@/lib/supabase";
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
@@ -51,6 +55,9 @@ function MusicVizUpload() {
   const [currentVisualizationId, setCurrentVisualizationId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
+  const [isSharing, setIsSharing] = useState<boolean>(false);
+  const [shareStatus, setShareStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
+  const [isCurrentVizPublic, setIsCurrentVizPublic] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardSourceRef = useRef<KeyboardSource | null>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -119,17 +126,49 @@ function MusicVizUpload() {
       const loadVisualizationId = urlParams.get('load');
       const shouldCreateNew = urlParams.get('new') === 'true';
       
-      if (loadVisualizationId && user) {
+      if (loadVisualizationId) {
         try {
           console.log('Loading visualization from URL:', loadVisualizationId);
           
           // Fetch the visualization from database
-          const { data: visualization, error } = await supabase
-            .from('visualizations')
-            .select('*')
-            .eq('id', loadVisualizationId)
-            .eq('user_id', user.id) // Only load user's own visualizations
-            .single();
+          let visualization = null;
+          let error = null;
+          
+          if (user) {
+            // If user is logged in, try to load their own visualization first
+            const userResult = await supabase
+              .from('visualizations')
+              .select('*')
+              .eq('id', loadVisualizationId)
+              .eq('user_id', user.id)
+              .single();
+              
+            if (!userResult.error) {
+              visualization = userResult.data;
+            } else {
+              // Fall back to public visualizations
+              const publicResult = await supabase
+                .from('visualizations')
+                .select('*')
+                .eq('id', loadVisualizationId)
+                .eq('is_public', true)
+                .single();
+                
+              visualization = publicResult.data;
+              error = publicResult.error;
+            }
+          } else {
+            // If user is not logged in, only try public visualizations
+            const publicResult = await supabase
+              .from('visualizations')
+              .select('*')
+              .eq('id', loadVisualizationId)
+              .eq('is_public', true)
+              .single();
+              
+            visualization = publicResult.data;
+            error = publicResult.error;
+          }
           
           if (error) {
             console.error('Error loading visualization:', error);
@@ -141,23 +180,36 @@ function MusicVizUpload() {
             clearSession();
             
             // Load the visualization data
-            setCurrentVisualizationId(visualization.id);
-            setVisualizationName(visualization.title);
+            const isOwnedByUser = user && visualization.user_id === user.id;
+            
+            if (isOwnedByUser) {
+              // User owns this visualization - allow editing
+              setCurrentVisualizationId(visualization.id);
+              setVisualizationName(visualization.title);
+              setIsCurrentVizPublic(visualization.is_public);
+              
+              // Save as current session for editing
+              saveSession({
+                visualizationId: visualization.id,
+                visualizationName: visualization.title,
+                settings: visualization.settings,
+                audioSource: visualization.audio_file_name ? {
+                  type: 'file' as any,
+                  fileName: visualization.audio_file_name
+                } : undefined
+              });
+            } else {
+              // Public visualization not owned by user - view only
+              setCurrentVisualizationId(null);
+              setVisualizationName(visualization.title + " (View Only)");
+              
+              // Don't save to session for view-only mode
+              clearSession();
+            }
             
             if (visualization.audio_file_name) {
               setUploadedFileName(visualization.audio_file_name);
             }
-            
-            // Save as current session
-            saveSession({
-              visualizationId: visualization.id,
-              visualizationName: visualization.title,
-              settings: visualization.settings,
-              audioSource: visualization.audio_file_name ? {
-                type: 'file' as any,
-                fileName: visualization.audio_file_name
-              } : undefined
-            });
             
             setSaveStatus({ type: 'success', message: 'Visualization loaded successfully!' });
             
@@ -178,6 +230,7 @@ function MusicVizUpload() {
         setUploadFeedback({ type: null, message: "" });
         setSaveStatus({ type: null, message: "" });
         setCurrentSourceType(AudioSourceType.FILE);
+        setIsCurrentVizPublic(false);
         
         // Stop any current audio
         if (state.source) {
@@ -542,7 +595,6 @@ function MusicVizUpload() {
           audioFileName: uploadedFileName || null,
         },
         audio_file_name: uploadedFileName || undefined,
-        is_draft: true,
         is_public: false,
       };
 
@@ -595,6 +647,113 @@ function MusicVizUpload() {
     }
   };
 
+  const handleGenerateViewLink = async () => {
+    if (!user) {
+      setShareStatus({ type: 'error', message: 'Please sign in to generate a share link' });
+      return;
+    }
+
+    if (!currentVisualizationId) {
+      setShareStatus({ type: 'error', message: 'Please save your visualization before generating a link' });
+      return;
+    }
+
+    // Generate view-only link without making it public
+    const shareUrl = generateShareableUrl(currentVisualizationId);
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareStatus({ 
+        type: 'success', 
+        message: 'View-only link copied to clipboard!' 
+      });
+    } catch (clipboardError) {
+      setShareStatus({ 
+        type: 'success', 
+        message: `View-only link: ${shareUrl}` 
+      });
+    }
+
+    // Clear status message after 3 seconds
+    setTimeout(() => {
+      setShareStatus({ type: null, message: "" });
+    }, 3000);
+  };
+
+  const handleSetToPublic = async () => {
+    if (!user) {
+      setShareStatus({ type: 'error', message: 'Please sign in to manage your visualization' });
+      return;
+    }
+
+    if (!currentVisualizationId) {
+      setShareStatus({ type: 'error', message: 'Please save your visualization first' });
+      return;
+    }
+
+    setIsSharing(true);
+    
+    try {
+      if (isCurrentVizPublic) {
+        // Make private
+        setShareStatus({ type: null, message: "Returning to draft..." });
+        const { data, error } = await unshareVisualization(currentVisualizationId);
+        
+        if (error) {
+          setShareStatus({ 
+            type: 'error', 
+            message: error.message || 'Failed to return to draft' 
+          });
+        } else {
+          setIsCurrentVizPublic(false);
+          setShareStatus({ 
+            type: 'success', 
+            message: 'Visualization returned to draft' 
+          });
+        }
+      } else {
+        // Make public
+        setShareStatus({ type: null, message: "Publishing visualization..." });
+        const { data, error } = await shareVisualization(currentVisualizationId);
+        
+        if (error) {
+          setShareStatus({ 
+            type: 'error', 
+            message: error.message || 'Failed to publish visualization' 
+          });
+        } else {
+          setIsCurrentVizPublic(true);
+          const shareUrl = generateShareableUrl(currentVisualizationId);
+        
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          setShareStatus({ 
+            type: 'success', 
+            message: 'Visualization published! Now visible in Explore. Link copied to clipboard.' 
+          });
+        } catch (clipboardError) {
+          setShareStatus({ 
+            type: 'success', 
+            message: `Visualization published! Now visible in Explore. Share URL: ${shareUrl}` 
+          });
+        }
+        }
+      }
+    } catch (error) {
+      console.error('Error publishing visualization:', error);
+      setShareStatus({ 
+        type: 'error', 
+        message: error instanceof Error ? error.message : 'Failed to publish visualization' 
+      });
+    } finally {
+      setIsSharing(false);
+      
+      // Clear status message after 5 seconds
+      setTimeout(() => {
+        setShareStatus({ type: null, message: "" });
+      }, 5000);
+    }
+  };
 
   return (
     <DefaultPageLayout>
@@ -630,6 +789,15 @@ function MusicVizUpload() {
                 {saveStatus.message}
               </div>
             )}
+            {shareStatus.type && (
+              <div className={`text-caption font-caption mt-2 px-3 py-2 rounded-md border ${
+                shareStatus.type === 'success' 
+                  ? 'text-success-600 bg-success-50 border-success-200' 
+                  : 'text-error-700 bg-error-50 border-error-200'
+              }`}>
+                {shareStatus.message}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -647,18 +815,35 @@ function MusicVizUpload() {
               {currentVisualizationId ? 'Update' : 'Save draft'}
             </Button>
             <Button
-              variant="neutral-tertiary"
+              variant="brand-tertiary"
               icon={<FeatherPlus />}
               onClick={handleCreateNew}
             >
               Create New
             </Button>
-            <Button
-              variant="destructive-secondary"
-              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+            <Popover
+              trigger={
+                <Button
+                  variant="destructive-secondary"
+                  disabled={!currentVisualizationId}
+                >
+                  Share
+                </Button>
+              }
             >
-              Share
-            </Button>
+              <PopoverItem
+                onClick={handleGenerateViewLink}
+                icon={<FeatherLink />}
+              >
+                Generate View-Only Link
+              </PopoverItem>
+              <PopoverItem
+                onClick={handleSetToPublic}
+                icon={<FeatherGlobe />}
+              >
+                {isCurrentVizPublic ? 'Return to Draft' : 'Set to Public'}
+              </PopoverItem>
+            </Popover>
           </div>
         </div>
         <div className="flex w-full grow shrink-0 basis-0 items-start gap-6">
