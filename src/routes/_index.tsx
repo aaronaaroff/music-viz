@@ -26,7 +26,7 @@ import { TextArea } from "@/ui/components/TextArea";
 import { Switch } from "@/ui/components/Switch";
 import { AudioSourceSelector } from "@/components/AudioSourceSelector";
 import { AudioLevelMeter } from "@/components/AudioLevelMeter";
-import { KeyboardInput } from "@/components/KeyboardInput";
+import { PianoKeyboard } from "@/components/PianoKeyboard";
 import { useAudioManager } from "@/hooks/useAudioManager";
 import { useKeyboardInput } from "@/hooks/useKeyboardInput";
 import { useVisualization } from "@/hooks/useVisualization";
@@ -58,6 +58,8 @@ function MusicVizUpload() {
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [shareStatus, setShareStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
   const [isCurrentVizPublic, setIsCurrentVizPublic] = useState<boolean>(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardSourceRef = useRef<KeyboardSource | null>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,15 +97,18 @@ function MusicVizUpload() {
     setRotationSpeed,
     togglePulseBeatSync,
     toggleFlashOnset,
-    loadPreset,
   } = useVisualization();
   
   const {
     activeNote,
+    activeNotes,
     startKeyboard,
     stopKeyboard,
     handleNoteOn,
     handleNoteOff,
+    keyboardMapping,
+    keyboardSource,
+    isKeyboardEnabled,
   } = useKeyboardInput();
   
   const handleCreateNew = useCallback(() => {
@@ -402,13 +407,17 @@ function MusicVizUpload() {
           const micSource = new MicrophoneSource(audioContext);
           const hasPermission = await micSource.requestPermission();
           if (hasPermission) {
+            await micSource.start(); // Start the microphone source
             await setSource(micSource, sourceType);
+            await startAnalysis(); // Start audio analysis immediately
           }
           break;
           
         case AudioSourceType.KEYBOARD:
-          if (keyboardSourceRef.current) {
-            await setSource(keyboardSourceRef.current, sourceType);
+          await startKeyboard(); // Initialize the keyboard source
+          if (keyboardSource) {
+            await setSource(keyboardSource, sourceType);
+            await startAnalysis(); // Start analysis immediately for keyboard
           }
           break;
       }
@@ -530,8 +539,6 @@ function MusicVizUpload() {
     }
   };
 
-  const activeNotes = activeNote ? [activeNote] : [];
-  const keyboardMapping = {}; // Default empty mapping for now
 
   // Cleanup time tracking on unmount
   useEffect(() => {
@@ -596,6 +603,7 @@ function MusicVizUpload() {
         },
         audio_file_name: uploadedFileName || undefined,
         is_public: false,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
       };
 
       if (currentVisualizationId) {
@@ -956,11 +964,19 @@ function MusicVizUpload() {
                   <FeatherMusic className="text-heading-1 font-heading-1 text-warning-700" />
                   <div className="flex flex-col items-center justify-center gap-1">
                     <span className="text-body font-body text-default-font text-center">
-                      Microphone Input Active
+                      {state.isPlaying ? "Microphone Active" : "Microphone Ready"}
                     </span>
                     <span className="text-caption font-caption text-subtext-color text-center">
-                      Make sure to allow microphone access
+                      {state.isPlaying 
+                        ? "Visualizing your microphone input in real-time" 
+                        : "Click play to start visualizing microphone input"}
                     </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <IconButton
+                      icon={state.isPlaying ? <FeatherPause /> : <FeatherPlay />}
+                      onClick={handlePlayPause}
+                    />
                   </div>
                 </div>
               )}
@@ -968,12 +984,12 @@ function MusicVizUpload() {
               {/* Keyboard Section */}
               {currentSourceType === AudioSourceType.KEYBOARD && (
                 <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-success-600 px-6 py-12">
-                  <KeyboardInput
+                  <PianoKeyboard
                     activeNotes={activeNotes}
                     onNoteStart={handleNoteOn}
                     onNoteStop={handleNoteOff}
                     keyboardMapping={keyboardMapping}
-                    className="w-full"
+                    keyboardSource={keyboardSource}
                   />
                 </div>
               )}
@@ -1041,31 +1057,12 @@ function MusicVizUpload() {
                       </ToggleGroup.Item>
                     </ToggleGroup>
                   </div>
-              <div className="flex w-full flex-col items-start gap-2">
-                <span className="text-body-bold font-body-bold text-default-font">
-                  Preset
-                </span>
-                <Select
-                  className="h-auto w-full flex-none"
-                  label=""
-                  placeholder="Choose preset"
-                  helpText=""
-                  value=""
-                  onValueChange={(value: string) => {
-                    if (value) loadPreset(value);
-                  }}
-                >
-                  <Select.Item value="minimal">Minimal</Select.Item>
-                  <Select.Item value="spectrum">Spectrum</Select.Item>
-                  <Select.Item value="particles">Particles</Select.Item>
-                </Select>
-              </div>
-              <div className="flex w-full flex-col items-start gap-2">
+              <div className="flex w-full flex-col items-start gap-2 relative">
                 <span className="text-body-bold font-body-bold text-default-font">
                   Color Theme
                 </span>
                 <Select
-                  className="h-auto w-full flex-none"
+                  className="h-auto w-full flex-none relative z-50"
                   label=""
                   placeholder="Select theme"
                   helpText=""
@@ -1122,33 +1119,77 @@ function MusicVizUpload() {
                 />
               </div>
                   <div className="flex w-full flex-col items-start gap-2">
+                    <span className="text-body-bold font-body-bold text-default-font">
+                      Tags
+                    </span>
+                    <span className="text-caption font-caption text-subtext-color">
+                      Add tags to help others discover your visualization
+                    </span>
+                    
+                    {/* Selected tags */}
+                    {selectedTags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {selectedTags.map(tag => (
+                          <div
+                            key={tag}
+                            className="flex items-center gap-1 px-3 py-1 bg-brand-100 text-brand-700 rounded-full text-caption"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))}
+                              className="ml-1 hover:text-brand-900"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Popular tags */}
+                    <div className="flex flex-wrap gap-2">
+                      {["Electronic", "Rock", "Jazz", "Ambient", "Classical", "Hip Hop", "Dance", "Chill"].map(tag => (
+                        <Button
+                          key={tag}
+                          variant={selectedTags.includes(tag) ? "brand-primary" : "neutral-secondary"}
+                          size="small"
+                          className="h-auto px-3 py-1 text-caption"
+                          onClick={() => {
+                            if (selectedTags.includes(tag)) {
+                              setSelectedTags(prev => prev.filter(t => t !== tag));
+                            } else {
+                              setSelectedTags(prev => [...prev, tag]);
+                            }
+                          }}
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    {/* Custom tag input */}
                     <TextField
                       className="h-auto w-full flex-none"
-                      label="Title"
-                      helpText="Name your visualization"
+                      label=""
+                      helpText=""
                     >
                       <TextField.Input
-                        placeholder="My Visualization"
-                        value=""
-                        onChange={(
-                          event: React.ChangeEvent<HTMLInputElement>
-                        ) => {}}
+                        placeholder="Add custom tags (press Enter to add)..."
+                        value={customTagInput}
+                        onChange={(e) => setCustomTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && customTagInput.trim()) {
+                            e.preventDefault();
+                            const newTag = customTagInput.trim();
+                            if (!selectedTags.includes(newTag)) {
+                              setSelectedTags(prev => [...prev, newTag]);
+                            }
+                            setCustomTagInput("");
+                          }
+                        }}
                       />
                     </TextField>
                   </div>
-                  <TextArea
-                    className="h-auto w-full flex-none"
-                    label="Description"
-                    helpText="Add details about your visualization"
-                  >
-                    <TextArea.Input
-                      placeholder="Describe your visualization..."
-                      value=""
-                      onChange={(
-                        event: React.ChangeEvent<HTMLTextAreaElement>
-                      ) => {}}
-                    />
-                  </TextArea>
                 </>
               )}
 

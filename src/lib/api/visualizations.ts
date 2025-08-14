@@ -152,24 +152,48 @@ export async function createVisualization(data: CreateVisualizationData) {
 // Update a visualization
 export async function updateVisualization(id: string, updates: VisualizationUpdate) {
   try {
-    // Add timeout to prevent hanging
-    const updatePromise = supabase
+    // Get fresh session to ensure we have current auth state
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.user) {
+      return { data: null, error: { message: 'User not authenticated' } };
+    }
+
+    // First check if the visualization exists and belongs to the user
+    const { data: existingViz, error: checkError } = await supabase
+      .from('visualizations')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking visualization:', checkError);
+      return { data: null, error: checkError };
+    }
+
+    if (!existingViz) {
+      return { 
+        data: null, 
+        error: { message: 'Visualization not found or you do not have permission to update it' } 
+      };
+    }
+
+    // Now perform the update
+    const { data, error } = await supabase
       .from('visualizations')
       .update(updates)
       .eq('id', id)
+      .eq('user_id', session.user.id)
       .select()
       .single();
-    
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Update operation timed out')), 10000)
-    );
 
-    const { data, error } = await Promise.race([
-      updatePromise,
-      timeoutPromise
-    ]) as any;
+    if (error) {
+      console.error('Update visualization error:', error);
+      return { data: null, error };
+    }
 
-    return { data, error };
+    return { data, error: null };
   } catch (error) {
     console.error('Update visualization error:', error);
     return { 
