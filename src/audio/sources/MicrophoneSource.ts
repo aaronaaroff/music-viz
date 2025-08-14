@@ -29,6 +29,11 @@ export class MicrophoneSource extends AudioSource {
   }
 
   async start(): Promise<void> {
+    // Check if already started
+    if (this.isActive) {
+      return;
+    }
+
     try {
       // Get microphone stream
       this.mediaStream = await navigator.mediaDevices.getUserMedia(this.constraints);
@@ -36,7 +41,18 @@ export class MicrophoneSource extends AudioSource {
       // Create audio source from stream
       this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.mediaStream);
       
-      this.connectSource(this.mediaStreamSource);
+      // For microphone, connect directly to analyzer and skip gain node to avoid feedback
+      // This is different from other sources which use connectSource()
+      this.sourceNode = this.mediaStreamSource;
+      this.mediaStreamSource.connect(this.analyzerNode);
+      
+      // Disconnect analyzer from gain node to prevent any audio output
+      try {
+        this.analyzerNode.disconnect(this.gainNode);
+      } catch (e) {
+        // Might already be disconnected
+      }
+      
       this.isActive = true;
     } catch (error) {
       throw new Error(`Failed to start microphone: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -50,8 +66,13 @@ export class MicrophoneSource extends AudioSource {
     }
 
     if (this.mediaStreamSource) {
-      this.disconnectSource();
+      try {
+        this.mediaStreamSource.disconnect();
+      } catch (e) {
+        // Ignore disconnection errors
+      }
       this.mediaStreamSource = null;
+      this.sourceNode = null;
     }
 
     this.isActive = false;

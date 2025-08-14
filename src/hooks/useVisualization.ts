@@ -64,56 +64,6 @@ export function useVisualization(initialSettings: Partial<VisualizationSettings>
     setSettings(DEFAULT_VISUALIZATION_SETTINGS);
   }, []);
 
-  // Preset configurations
-  const loadPreset = useCallback((presetName: string) => {
-    const presets: Record<string, Partial<VisualizationSettings>> = {
-      minimal: {
-        type: VisualizationType.CIRCLE,
-        colorTheme: ColorTheme.MONO,
-        particleCount: 32,
-        sensitivity: 0.5,
-        smoothing: 0.9,
-        sizeScale: 0.6,
-        glowIntensity: 0.2,
-        backgroundOpacity: 0.1,
-        rotationSpeed: 0.1,
-        pulseBeatSync: false,
-        flashOnset: false,
-      },
-      spectrum: {
-        type: VisualizationType.BARS,
-        colorTheme: ColorTheme.NEON,
-        particleCount: 64,
-        sensitivity: 0.8,
-        smoothing: 0.7,
-        sizeScale: 1.0,
-        glowIntensity: 0.8,
-        backgroundOpacity: 0.05,
-        rotationSpeed: 0,
-        pulseBeatSync: true,
-        flashOnset: true,
-      },
-      particles: {
-        type: VisualizationType.CIRCLE,
-        colorTheme: ColorTheme.SUNSET,
-        particleCount: 128,
-        sensitivity: 0.9,
-        smoothing: 0.6,
-        sizeScale: 0.8,
-        glowIntensity: 1.0,
-        backgroundOpacity: 0.02,
-        rotationSpeed: 0.3,
-        pulseBeatSync: true,
-        flashOnset: true,
-      },
-    };
-
-    const preset = presets[presetName];
-    if (preset) {
-      updateSettings(preset);
-    }
-  }, [updateSettings]);
-
   return {
     settings,
     updateSettings,
@@ -129,6 +79,5 @@ export function useVisualization(initialSettings: Partial<VisualizationSettings>
     togglePulseBeatSync,
     toggleFlashOnset,
     resetToDefaults,
-    loadPreset,
   };
 }

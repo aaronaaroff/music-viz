@@ -38,8 +38,11 @@ export class AudioManager {
     }
 
     this.currentSource = source;
-    this.state.currentSource = source;
-    this.state.sourceType = sourceType;
+    this.state = {
+      ...this.state,
+      currentSource: source,
+      sourceType
+    };
     this.notifyListeners();
   }
 
@@ -49,7 +52,10 @@ export class AudioManager {
     }
 
     await this.currentSource.start();
-    this.state.isPlaying = true;
+    this.state = {
+      ...this.state,
+      isPlaying: true
+    };
     
     // Start analysis loop
     this.startAnalysisLoop();
@@ -66,8 +72,11 @@ export class AudioManager {
       this.animationFrame = null;
     }
     
-    this.state.isPlaying = false;
-    this.state.analysisData = null;
+    this.state = {
+      ...this.state,
+      isPlaying: false,
+      analysisData: null
+    };
     this.notifyListeners();
   }
 
@@ -75,7 +84,10 @@ export class AudioManager {
     if (this.currentSource) {
       this.currentSource.setVolume(volume);
     }
-    this.state.volume = volume;
+    this.state = {
+      ...this.state,
+      volume
+    };
     this.notifyListeners();
   }
 
@@ -99,7 +111,11 @@ export class AudioManager {
       const analyzer = this.currentSource.getAnalyzer();
       const analysisData = this.analyzerEngine.analyze(analyzer);
       
-      this.state.analysisData = analysisData;
+      // Create new state object to trigger React re-renders
+      this.state = {
+        ...this.state,
+        analysisData
+      };
       this.notifyListeners();
       
       this.animationFrame = requestAnimationFrame(analyze);

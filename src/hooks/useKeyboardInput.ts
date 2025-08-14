@@ -160,6 +160,7 @@ export function useKeyboardInput() {
     handleNoteOff,
     keyboardMapping: defaultMapping,
     keyboardSource: keyboardSourceRef.current,
+    keyboardSourceRef, // Add ref access for immediate availability
     isKeyboardEnabled,
   };
 }

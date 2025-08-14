@@ -67,7 +67,7 @@ export function VisualizationCanvas({
 
   // Animation loop
   useEffect(() => {
-    if (!isPlaying || !engineRef.current || !audioData) {
+    if (!isPlaying || !engineRef.current) {
       // Stop animation when not playing
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -77,8 +77,21 @@ export function VisualizationCanvas({
     }
 
     const animate = () => {
-      if (engineRef.current && audioData && isPlaying) {
-        engineRef.current.render(audioData);
+      if (engineRef.current && isPlaying) {
+        // Use audioData if available, otherwise render with silence (for immediate visual feedback)
+        const dataToRender = audioData || {
+          frequencyData: new Uint8Array(1024).fill(0),
+          timeData: new Uint8Array(1024).fill(128),
+          volume: 0,
+          beat: false,
+          onset: false,
+          spectralCentroid: 0,
+          bassEnergy: 0,
+          midEnergy: 0,
+          highEnergy: 0,
+        };
+        
+        engineRef.current.render(dataToRender);
         animationFrameRef.current = requestAnimationFrame(animate);
       }
     };
@@ -116,8 +129,8 @@ export function VisualizationCanvas({
 
     window.addEventListener('resize', handleResize);
     
-    // Initial size setup
-    setTimeout(handleResize, 0);
+    // Initial size setup - call immediately without delay
+    handleResize();
 
     return () => {
       window.removeEventListener('resize', handleResize);

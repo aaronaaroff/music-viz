@@ -9,7 +9,7 @@ import { FeatherLink } from "@subframe/core";
 import { FeatherGlobe } from "@subframe/core";
 import { Popover, PopoverItem } from "@/components/Popover";
 import { Select } from "@/ui/components/Select";
-import { FeatherMusic } from "@subframe/core";
+import { FeatherMusic, FeatherMic } from "@subframe/core";
 import { IconButton } from "@/ui/components/IconButton";
 import { FeatherSkipBack } from "@subframe/core";
 import { FeatherPlay } from "@subframe/core";
@@ -77,6 +77,7 @@ function MusicVizUpload() {
   }, []);
   
   const { state, setSource, startAnalysis, stopAnalysis, setVolume } = useAudioManager();
+  
   const { user } = useAuth();
   const { saveSession, loadSession, clearSession } = useSessionPersistence();
   const location = useLocation();
@@ -108,6 +109,7 @@ function MusicVizUpload() {
     handleNoteOff,
     keyboardMapping,
     keyboardSource,
+    keyboardSourceRef: hookKeyboardSourceRef,
     isKeyboardEnabled,
   } = useKeyboardInput();
   
@@ -369,11 +371,7 @@ function MusicVizUpload() {
     saveSession
   ]);
   
-  // Initialize keyboard source
-  if (!keyboardSourceRef.current && typeof window !== 'undefined') {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    keyboardSourceRef.current = new KeyboardSource(audioContext);
-  }
+  // Keyboard source is managed by the useKeyboardInput hook
 
 
   const handleSourceChange = async (sourceType: AudioSourceType) => {
@@ -404,21 +402,24 @@ function MusicVizUpload() {
           break;
           
         case AudioSourceType.MICROPHONE:
+          // Create microphone source exactly like file upload does
           const micSource = new MicrophoneSource(audioContext);
           const hasPermission = await micSource.requestPermission();
           if (hasPermission) {
             await micSource.start(); // Start the microphone source
             await setSource(micSource, sourceType);
-            await startAnalysis(); // Start audio analysis immediately
+            // Auto-start analysis for microphone (unlike file which requires play button)
+            await startAnalysis();
           }
           break;
           
         case AudioSourceType.KEYBOARD:
-          await startKeyboard(); // Initialize the keyboard source
-          if (keyboardSource) {
-            await setSource(keyboardSource, sourceType);
-            await startAnalysis(); // Start analysis immediately for keyboard
-          }
+          // Create keyboard source exactly like file upload does
+          const kbSource = new KeyboardSource(audioContext);
+          await kbSource.start();
+          await setSource(kbSource, sourceType);
+          // Auto-start analysis for keyboard (unlike file which requires play button)
+          await startAnalysis();
           break;
       }
     } catch (error) {
@@ -961,22 +962,14 @@ function MusicVizUpload() {
               {/* Microphone Section */}
               {currentSourceType === AudioSourceType.MICROPHONE && (
                 <div className="flex w-full flex-col items-center justify-center gap-4 rounded-md border border-dashed border-warning-600 px-6 py-12">
-                  <FeatherMusic className="text-heading-1 font-heading-1 text-warning-700" />
+                  <FeatherMic className="text-heading-1 font-heading-1 text-warning-700" />
                   <div className="flex flex-col items-center justify-center gap-1">
                     <span className="text-body font-body text-default-font text-center">
-                      {state.isPlaying ? "Microphone Active" : "Microphone Ready"}
+                      Microphone Active
                     </span>
                     <span className="text-caption font-caption text-subtext-color text-center">
-                      {state.isPlaying 
-                        ? "Visualizing your microphone input in real-time" 
-                        : "Click play to start visualizing microphone input"}
+                      Visualizing your microphone input in real-time
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <IconButton
-                      icon={state.isPlaying ? <FeatherPause /> : <FeatherPlay />}
-                      onClick={handlePlayPause}
-                    />
                   </div>
                 </div>
               )}
@@ -989,7 +982,7 @@ function MusicVizUpload() {
                     onNoteStart={handleNoteOn}
                     onNoteStop={handleNoteOff}
                     keyboardMapping={keyboardMapping}
-                    keyboardSource={keyboardSource}
+                    keyboardSource={currentSourceType === AudioSourceType.KEYBOARD ? state.currentSource : keyboardSource}
                   />
                 </div>
               )}
@@ -1004,6 +997,7 @@ function MusicVizUpload() {
                   settings={visualizationSettings}
                   isPlaying={state.isPlaying}
                   className="w-full h-full"
+                  key={`viz-${currentSourceType}-${state.isPlaying}`} // Force re-render on source/play state change
                 />
               </div>
             </div>

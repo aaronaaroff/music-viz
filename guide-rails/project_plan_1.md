@@ -2,7 +2,7 @@
 
 ## Current Phase: Phase 1 - Foundation & Core Features ✅
 
-### Phase Status: **85% Complete**
+### Phase Status: **75% Complete**
 - ✅ Authentication system with Supabase
 - ✅ Multi-input audio processing (file, microphone, keyboard)
 - ✅ Real-time visualization engine with 3 visualization types
@@ -100,6 +100,32 @@
 
 ---
 
+#### **Story 1.8a: Critical Bug Fixes & Polish** 🔧 **IN PROGRESS**
+**Status:** Addressing critical functionality issues
+
+**Tasks:**
+- [ ] Fix audio file not persisting on page refresh/update
+- [ ] Fix microphone input not triggering visualizations properly
+- [ ] Remove microphone audio feedback (input only, no speaker output)
+- [ ] Verify preset system is fully removed
+- [ ] Fix tags not persisting to database
+- [ ] Add tag validation (15 char limit, no URLs, edge cases)
+- [ ] Fix visualization initial responsiveness (immediate trigger on play)
+- [ ] Fix requirement to switch inputs to trigger visualizations
+
+**Completed:**
+- [x] Keyboard component functional and triggering visualizations
+- [x] Fixed dropdown z-index clipping issues
+- [x] Keyboard notes stop properly on release
+
+**Technical Notes:**
+- Audio file persistence may need blob storage integration
+- Microphone should only capture input, not route to speakers
+- Visualization triggering should be automatic on audio play
+- Tag validation should include sanitization and length limits
+
+---
+
 ### 📋 **Upcoming Stories (Phase 1 Completion)**
 
 #### **Story 1.9: Profile Page Implementation** ⏳ **PENDING**
@@ -178,18 +204,25 @@
 - Video export functionality
 - Mobile optimization and touch controls
 - Performance optimizations for complex visualizations
+- "Request A Song" functionality for collaborative music selection
 
 ---
 
 ## Current Blockers & Resolutions
 
 ### **High Priority**
-1. **Database Connectivity (Story 1.7)** - Supabase custom table queries hanging
-   - *Resolution Path:* Debug RLS policies, test simplified schema, verify connection configuration
+1. **Audio File Persistence** - Uploaded audio files not surviving page refresh
+   - *Resolution Path:* Implement proper blob storage or base64 encoding for audio data
+2. **Microphone Feedback Loop** - Microphone input causing audio feedback through speakers
+   - *Resolution Path:* Disable audio output for microphone input, visualization only
+3. **Visualization Responsiveness** - Requires input switching to trigger visualizations
+   - *Resolution Path:* Fix event listeners and initialization sequence
 
 ### **Medium Priority**  
-1. **Visualization Persistence** - Depends on database connectivity resolution
-2. **Sign-out Functionality** - Implemented but needs verification testing
+1. **Tag Persistence** - Tags not saving to database properly
+   - *Resolution Path:* Debug save operation and ensure proper data structure
+2. **Tag Validation** - Need input sanitization and limits
+   - *Resolution Path:* Implement validation rules (15 char, no URLs, etc.)
 
 ---
 
@@ -214,5 +247,5 @@
 
 ---
 
-**Last Updated:** Current session
-**Next Review:** After Story 1.7 completion
+**Last Updated:** Current session - Added Story 1.8a for critical bug fixes
+**Next Review:** After Story 1.8a completion
