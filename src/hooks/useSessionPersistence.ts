@@ -4,9 +4,11 @@ interface SessionState {
   visualizationId: string | null;
   visualizationName: string;
   settings: any;
+  tags?: string[];
   audioSource?: {
     type: 'file' | 'microphone' | 'keyboard';
     fileName?: string;
+    audioFileUrl?: string; // Supabase Storage URL for persistence
   };
   lastSaved?: number;
 }

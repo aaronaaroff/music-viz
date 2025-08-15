@@ -39,6 +39,7 @@ import { VisualizationType, ColorTheme } from "@/visualizers/types";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getNextDraftNumber, shareVisualization, unshareVisualization, generateShareableUrl } from "@/lib/api/visualizations";
 import { robustCreateVisualization, robustUpdateVisualization } from "@/lib/api/robustOperations";
+import { uploadAudioFile, loadAudioFileFromUrl } from "@/lib/api/audioFiles";
 import { supabase } from "@/lib/supabase";
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -48,6 +49,9 @@ function MusicVizUpload() {
   const [activeTab, setActiveTab] = useState<string>("style");
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const [uploadFeedback, setUploadFeedback] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
+  const [currentAudioFile, setCurrentAudioFile] = useState<File | null>(null);
+  const [currentAudioFileUrl, setCurrentAudioFileUrl] = useState<string>("");
+  const [currentAudioFilePath, setCurrentAudioFilePath] = useState<string>("");
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [visualizationName, setVisualizationName] = useState<string>("Visualization 1");
@@ -195,14 +199,26 @@ function MusicVizUpload() {
               setVisualizationName(visualization.title);
               setIsCurrentVizPublic(visualization.is_public);
               
+              // Restore tags
+              if (visualization.tags && Array.isArray(visualization.tags)) {
+                setSelectedTags(visualization.tags);
+              }
+              
+              // Apply visualization settings
+              if (updateSettings) {
+                updateSettings(visualization.settings);
+              }
+              
               // Save as current session for editing
               saveSession({
                 visualizationId: visualization.id,
                 visualizationName: visualization.title,
                 settings: visualization.settings,
+                tags: visualization.tags || [],
                 audioSource: visualization.audio_file_name ? {
                   type: 'file' as any,
-                  fileName: visualization.audio_file_name
+                  fileName: visualization.audio_file_name,
+                  audioFileUrl: visualization.audio_file_url
                 } : undefined
               });
             } else {
@@ -216,6 +232,29 @@ function MusicVizUpload() {
             
             if (visualization.audio_file_name) {
               setUploadedFileName(visualization.audio_file_name);
+              setCurrentAudioFileUrl(visualization.audio_file_url || '');
+              
+              // Restore audio file from Supabase Storage if available
+              if (visualization.audio_file_url) {
+                try {
+                  // Load audio file from URL and recreate audio source
+                  const audioFile = await loadAudioFileFromUrl(
+                    visualization.audio_file_url, 
+                    visualization.audio_file_name
+                  );
+                  
+                  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const fileSource = new FileSource(audioContext);
+                  await fileSource.loadFile(audioFile);
+                  await setSource(fileSource, AudioSourceType.FILE);
+                  setCurrentSourceType(AudioSourceType.FILE);
+                  setDuration(fileSource.getDuration());
+                  setCurrentTime(0);
+                } catch (audioError) {
+                  console.warn('Failed to restore audio file:', audioError);
+                  // Continue without audio - user can re-upload if needed
+                }
+              }
             }
             
             setSaveStatus({ type: 'success', message: 'Visualization loaded successfully!' });
@@ -298,8 +337,37 @@ function MusicVizUpload() {
           if (savedSession.visualizationName) {
             setVisualizationName(savedSession.visualizationName);
           }
+          if (savedSession.tags) {
+            setSelectedTags(savedSession.tags);
+          }
           if (savedSession.audioSource?.fileName) {
             setUploadedFileName(savedSession.audioSource.fileName);
+            if (savedSession.audioSource.audioFileUrl) {
+              setCurrentAudioFileUrl(savedSession.audioSource.audioFileUrl);
+              
+              // Restore audio file from Supabase Storage
+              const restoreAudioFromSession = async () => {
+                try {
+                  const audioFile = await loadAudioFileFromUrl(
+                    savedSession.audioSource.audioFileUrl,
+                    savedSession.audioSource.fileName
+                  );
+                  
+                  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const fileSource = new FileSource(audioContext);
+                  await fileSource.loadFile(audioFile);
+                  await setSource(fileSource, AudioSourceType.FILE);
+                  setCurrentSourceType(AudioSourceType.FILE);
+                  setDuration(fileSource.getDuration());
+                  setCurrentTime(0);
+                } catch (audioError) {
+                  console.warn('Failed to restore audio from session:', audioError);
+                }
+              };
+              
+              // Run async restoration
+              restoreAudioFromSession();
+            }
           }
           // Settings will be restored after visualization hook is initialized
         }
@@ -337,6 +405,8 @@ function MusicVizUpload() {
     }
   }, [updateSettings, loadSession, currentVisualizationId]);
 
+  // TODO: Restore audio file from Supabase Storage when visualization is loaded
+
   // Auto-save session state
   useEffect(() => {
     const saveCurrentSession = () => {
@@ -344,9 +414,11 @@ function MusicVizUpload() {
         visualizationId: currentVisualizationId,
         visualizationName,
         settings: visualizationSettings,
+        tags: selectedTags,
         audioSource: uploadedFileName ? {
           type: currentSourceType as any,
-          fileName: uploadedFileName
+          fileName: uploadedFileName,
+          audioFileUrl: currentAudioFileUrl
         } : undefined
       });
     };
@@ -368,6 +440,7 @@ function MusicVizUpload() {
     visualizationSettings, 
     uploadedFileName, 
     currentSourceType, 
+    selectedTags,
     saveSession
   ]);
   
@@ -455,6 +528,7 @@ function MusicVizUpload() {
     }
 
     try {
+      // Create audio source first
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const fileSource = new FileSource(audioContext);
       await fileSource.loadFile(file);
@@ -466,10 +540,15 @@ function MusicVizUpload() {
       setDuration(fileSource.getDuration());
       setCurrentTime(0);
       
+      // Store the file for upload when saving
+      setCurrentAudioFile(file);
+      
       setUploadFeedback({ 
         type: 'success', 
         message: `Successfully loaded ${file.name}` 
       });
+
+      // File loaded successfully, will upload to storage on save
     } catch (error) {
       setUploadFeedback({ 
         type: 'error', 
@@ -594,6 +673,25 @@ function MusicVizUpload() {
     }
 
     try {
+      // Upload audio file to storage if we have one and it's not already uploaded
+      let audioFileUrl = currentAudioFileUrl;
+      if (currentAudioFile && !currentAudioFileUrl) {
+        try {
+          const uploadResult = await uploadAudioFile({
+            file: currentAudioFile,
+            userId: user.id,
+            visualizationId: currentVisualizationId
+          });
+          
+          audioFileUrl = uploadResult.url;
+          setCurrentAudioFileUrl(uploadResult.url);
+          setCurrentAudioFilePath(uploadResult.path);
+        } catch (uploadError) {
+          console.error('Failed to upload audio file:', uploadError);
+          // Continue with save but without audio URL
+        }
+      }
+
       const visualizationData = {
         title: visualizationName,
         description: "Created with Music Visualizer",
@@ -603,6 +701,7 @@ function MusicVizUpload() {
           audioFileName: uploadedFileName || null,
         },
         audio_file_name: uploadedFileName || undefined,
+        audio_file_url: audioFileUrl || undefined,
         is_public: false,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       };
@@ -633,9 +732,11 @@ function MusicVizUpload() {
             visualizationId: data.id,
             visualizationName,
             settings: visualizationSettings,
+            tags: selectedTags,
             audioSource: uploadedFileName ? {
               type: currentSourceType as any,
-              fileName: uploadedFileName
+              fileName: uploadedFileName,
+              audioFileUrl: currentAudioFileUrl
             } : undefined
           });
         }
@@ -1151,7 +1252,7 @@ function MusicVizUpload() {
                           onClick={() => {
                             if (selectedTags.includes(tag)) {
                               setSelectedTags(prev => prev.filter(t => t !== tag));
-                            } else {
+                            } else if (selectedTags.length < 5) {
                               setSelectedTags(prev => [...prev, tag]);
                             }
                           }}
@@ -1164,18 +1265,36 @@ function MusicVizUpload() {
                     {/* Custom tag input */}
                     <TextField
                       className="h-auto w-full flex-none"
-                      label=""
-                      helpText=""
+                      label={`Add Custom Tags (${selectedTags.length}/5 tags)`}
+                      helpText={`${customTagInput.length}/15 characters. No URLs allowed.`}
                     >
                       <TextField.Input
                         placeholder="Add custom tags (press Enter to add)..."
                         value={customTagInput}
-                        onChange={(e) => setCustomTagInput(e.target.value)}
+                        onChange={(e) => {
+                          // Limit input to 15 characters
+                          if (e.target.value.length <= 15) {
+                            setCustomTagInput(e.target.value);
+                          }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && customTagInput.trim()) {
                             e.preventDefault();
                             const newTag = customTagInput.trim();
-                            if (!selectedTags.includes(newTag)) {
+                            
+                            // Tag validation
+                            if (newTag.length > 15) {
+                              // Show error feedback (optional - could use toast)
+                              return;
+                            }
+                            
+                            // Check for URLs (basic validation)
+                            if (newTag.includes('http') || newTag.includes('www.') || newTag.includes('.com') || newTag.includes('.org') || newTag.includes('.net')) {
+                              // Show error feedback (optional - could use toast)  
+                              return;
+                            }
+                            
+                            if (!selectedTags.includes(newTag) && selectedTags.length < 5) {
                               setSelectedTags(prev => [...prev, newTag]);
                             }
                             setCustomTagInput("");
