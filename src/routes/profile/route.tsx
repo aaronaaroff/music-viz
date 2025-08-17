@@ -49,6 +49,10 @@ function UserProfileHub() {
   // File upload refs
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
   const bannerInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Upload status states
+  const [uploadStatus, setUploadStatus] = useState<{ type: 'error' | 'success' | null; message: string }>({ type: null, message: '' });
+  const [isUploading, setIsUploading] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -175,6 +179,32 @@ function UserProfileHub() {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
+    // Clear any previous status
+    setUploadStatus({ type: null, message: '' });
+    
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadStatus({ 
+        type: 'error', 
+        message: 'Image must be less than 5MB. Please choose a smaller file.' 
+      });
+      // Clear the file input
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+      return;
+    }
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setUploadStatus({ 
+        type: 'error', 
+        message: 'Please select a valid image file (JPEG, PNG, GIF, etc.)' 
+      });
+      // Clear the file input
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploading(true);
     try {
       const result = await uploadImage({
         file,
@@ -184,10 +214,23 @@ function UserProfileHub() {
 
       // Update profile with new avatar URL
       await updateProfile({ avatar_url: result.url });
-      console.log('Avatar uploaded successfully:', result.url);
+      setUploadStatus({ 
+        type: 'success', 
+        message: 'Avatar updated successfully!' 
+      });
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadStatus({ type: null, message: '' }), 3000);
     } catch (error) {
       console.error('Avatar upload failed:', error);
-      // You could add toast notification here
+      setUploadStatus({ 
+        type: 'error', 
+        message: error instanceof Error ? error.message : 'Failed to upload avatar. Please try again.' 
+      });
+    } finally {
+      setIsUploading(false);
+      // Clear the file input
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
     }
   };
 
@@ -195,6 +238,32 @@ function UserProfileHub() {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
+    // Clear any previous status
+    setUploadStatus({ type: null, message: '' });
+    
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadStatus({ 
+        type: 'error', 
+        message: 'Image must be less than 5MB. Please choose a smaller file.' 
+      });
+      // Clear the file input
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
+      return;
+    }
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setUploadStatus({ 
+        type: 'error', 
+        message: 'Please select a valid image file (JPEG, PNG, GIF, etc.)' 
+      });
+      // Clear the file input
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploading(true);
     try {
       const result = await uploadImage({
         file,
@@ -204,10 +273,23 @@ function UserProfileHub() {
 
       // Update profile with new banner URL
       await updateProfile({ banner_url: result.url });
-      console.log('Banner uploaded successfully:', result.url);
+      setUploadStatus({ 
+        type: 'success', 
+        message: 'Banner updated successfully!' 
+      });
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadStatus({ type: null, message: '' }), 3000);
     } catch (error) {
       console.error('Banner upload failed:', error);
-      // You could add toast notification here
+      setUploadStatus({ 
+        type: 'error', 
+        message: error instanceof Error ? error.message : 'Failed to upload banner. Please try again.' 
+      });
+    } finally {
+      setIsUploading(false);
+      // Clear the file input
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
     }
   };
 
@@ -251,6 +333,15 @@ function UserProfileHub() {
         
         <div className="container max-w-none flex w-full grow shrink-0 basis-0 flex-col items-start gap-4 bg-default-background py-12 overflow-auto">
           <div className="flex w-full flex-col items-start gap-12">
+            {/* Upload status message */}
+            {uploadStatus.type && (
+              <div className={`w-full p-4 rounded-md ${
+                uploadStatus.type === 'error' ? 'bg-error-50 text-error-700' : 'bg-success-50 text-success-700'
+              }`}>
+                {uploadStatus.message}
+              </div>
+            )}
+            
             {/* Profile header */}
             <div className="flex w-full flex-col items-start gap-4 relative">
               <div 
@@ -266,7 +357,11 @@ function UserProfileHub() {
                 />
                 {isEditingProfile && (
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center">
-                    <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-2xl" />
+                    {isUploading ? (
+                      <div className="text-white animate-spin">⟳</div>
+                    ) : (
+                      <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-2xl" />
+                    )}
                   </div>
                 )}
               </div>
@@ -291,7 +386,11 @@ function UserProfileHub() {
                   </Avatar>
                   {isEditingProfile && (
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center rounded-full">
-                      <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      {isUploading ? (
+                        <div className="text-white animate-spin">⟳</div>
+                      ) : (
+                        <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      )}
                     </div>
                   )}
                 </div>

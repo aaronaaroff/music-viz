@@ -32,7 +32,7 @@ import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
-  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
+  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null; banner_url?: string | null } | null;
   saved_at?: string;
   likes_count?: number;
   comments_count?: number;
@@ -217,16 +217,28 @@ function SavedPage() {
   const renderVisualizationCard = (viz: Visualization) => {
     const inFolders = folders.filter(f => f.id !== 'all' && f.visualizationIds.includes(viz.id));
     
+    const handleCardClick = (e: React.MouseEvent) => {
+      // Only navigate if clicking on the card itself in grid mode, not on buttons
+      if (viewMode === 'grid' && 
+          !(e.target as HTMLElement).closest('button') && 
+          !(e.target as HTMLElement).closest('[role="button"]')) {
+        navigate(`/?load=${viz.id}`);
+      }
+    };
+    
     return (
       <div
         key={viz.id}
-        className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 hover:shadow-md transition-shadow"
+        className={`flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 transition-shadow ${
+          viewMode === 'grid' ? 'cursor-pointer hover:shadow-md' : ''
+        }`}
+        onClick={handleCardClick}
       >
         {/* Visualization preview */}
         <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-md bg-black">
           <img
             className="grow shrink-0 basis-0 self-stretch object-cover opacity-50"
-            src={viz.thumbnail_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
+            src={viz.thumbnail_url || viz.profiles?.banner_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
             alt={viz.title}
           />
           <div className="absolute inset-0 flex items-center justify-center">
@@ -234,7 +246,10 @@ function SavedPage() {
               variant="inverse"
               size="large"
               icon={<FeatherPlay />}
-              onClick={() => navigate(`/?load=${viz.id}`)}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/?load=${viz.id}`);
+              }}
             />
           </div>
           {viz.audio_file_name && (
@@ -307,7 +322,7 @@ function SavedPage() {
         {inFolders.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {inFolders.map(folder => (
-              <Badge key={folder.id} size="small" variant="neutral">
+              <Badge key={folder.id} variant="neutral">
                 <FeatherFolder className="w-3 h-3" />
                 {folder.name}
               </Badge>

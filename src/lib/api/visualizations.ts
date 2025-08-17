@@ -29,7 +29,8 @@ export async function getPublicVisualizations(
       profiles:user_id (
         username,
         full_name,
-        avatar_url
+        avatar_url,
+        banner_url
       ),
       user_liked:likes(user_id),
       user_saved:saves(user_id)

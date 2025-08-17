@@ -20,7 +20,6 @@ import { FeatherX } from "@subframe/core";
 import { FeatherChevronLeft } from "@subframe/core";
 import { FeatherSend } from "@subframe/core";
 import { FeatherUser } from "@subframe/core";
-import { FeatherPlay } from "@subframe/core";
 import { FeatherMusic } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getPublicVisualizations, toggleLike, toggleSave, createComment, getVisualizationComments } from "@/lib/api/visualizations";
@@ -28,7 +27,7 @@ import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
-  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
+  profiles?: { username: string | null; full_name: string | null; avatar_url: string | null; banner_url?: string | null } | null;
   user_liked?: { user_id: string }[];
   user_saved?: { user_id: string }[];
   likes_count?: number;
@@ -242,13 +241,23 @@ function ExplorePage() {
     const isLiked = user && viz.user_liked?.some(like => like.user_id === user.id);
     const isSaved = user && viz.user_saved?.some(save => save.user_id === user.id);
     
+    const handleCardClick = (e: React.MouseEvent) => {
+      // Only navigate if clicking on the card itself in grid mode, not on buttons
+      if (viewMode === 'grid' && 
+          !(e.target as HTMLElement).closest('button') && 
+          !isExpanded) {
+        navigate(`/?load=${viz.id}`);
+      }
+    };
+    
     return (
       <div
         key={viz.id}
         className={`flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 transition-all duration-300 ${
           isExpanded ? 'col-span-full' : ''
-        }`}
+        } ${viewMode === 'grid' && !isExpanded ? 'cursor-pointer hover:shadow-md' : ''}`}
         ref={isExpanded ? expandedRef : null}
+        onClick={handleCardClick}
       >
         <div className={`flex ${isExpanded ? 'gap-6' : 'flex-col gap-4'} w-full`}>
           {/* Visualization preview */}
@@ -256,17 +265,9 @@ function ExplorePage() {
             <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-md bg-black">
               <img
                 className="grow shrink-0 basis-0 self-stretch object-cover opacity-50"
-                src={viz.thumbnail_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
+                src={viz.thumbnail_url || viz.profiles?.banner_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
                 alt={viz.title}
               />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <IconButton
-                  variant="inverse"
-                  size="large"
-                  icon={<FeatherPlay />}
-                  onClick={() => navigate(`/?load=${viz.id}`)}
-                />
-              </div>
               {viz.audio_file_name && (
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1">
                   <FeatherMusic className="text-caption font-caption text-white" />
@@ -299,7 +300,10 @@ function ExplorePage() {
               </div>
               <IconButton
                 icon={<FeatherMoreVertical />}
-                onClick={() => {}}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // TODO: Implement more options menu
+                }}
               />
             </div>
             
@@ -309,14 +313,20 @@ function ExplorePage() {
                 <Button
                   variant={isLiked ? "brand-tertiary" : "neutral-tertiary"}
                   icon={<FeatherHeart />}
-                  onClick={() => handleLike(viz.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLike(viz.id);
+                  }}
                 >
                   {viz.likes_count || 0}
                 </Button>
                 <Button
                   variant={isExpanded ? "brand-tertiary" : "neutral-tertiary"}
                   icon={<FeatherMessageCircle />}
-                  onClick={() => handleCommentClick(viz.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCommentClick(viz.id);
+                  }}
                 >
                   {viz.comments_count || 0}
                 </Button>
@@ -324,7 +334,10 @@ function ExplorePage() {
               <IconButton
                 variant={isSaved ? "brand-primary" : "neutral-primary"}
                 icon={<FeatherBookmark />}
-                onClick={() => handleSave(viz.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSave(viz.id);
+                }}
               />
             </div>
           </div>

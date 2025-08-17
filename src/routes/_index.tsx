@@ -702,7 +702,7 @@ function MusicVizUpload() {
         },
         audio_file_name: uploadedFileName || undefined,
         audio_file_url: audioFileUrl || undefined,
-        is_public: false,
+        is_public: isCurrentVizPublic,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       };
 
