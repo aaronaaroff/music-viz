@@ -92,11 +92,13 @@ function UserProfileHub() {
   useEffect(() => {
     let filtered = [...visualizations];
     
-    // Filter by search term
+    // Filter by search term (including tags)
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(viz => 
-        viz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (viz.description && viz.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        viz.title.toLowerCase().includes(searchLower) ||
+        (viz.description && viz.description.toLowerCase().includes(searchLower)) ||
+        (viz.tags && viz.tags.some(tag => tag.toLowerCase().includes(searchLower)))
       );
     }
     
@@ -246,6 +248,14 @@ function UserProfileHub() {
                             setEditForm(prev => ({ ...prev, username: e.target.value }))}
                         />
                       </TextField>
+                      <TextField label="Bio" helpText="Tell others about yourself">
+                        <TextField.Input
+                          placeholder="A brief description about you..."
+                          value={editForm.bio}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                            setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                        />
+                      </TextField>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -286,26 +296,18 @@ function UserProfileHub() {
               <div className="flex flex-wrap items-start gap-12">
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Visualizations
+                    Total Likes
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.length}
+                    {visualizations.reduce((sum, v) => sum + (v.likes_count || 0), 0)}
                   </span>
                 </div>
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Published
+                    Total Views
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.filter(v => v.is_public).length}
-                  </span>
-                </div>
-                <div className="flex flex-col items-start">
-                  <span className="text-caption font-caption text-subtext-color">
-                    Drafts
-                  </span>
-                  <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.filter(v => !v.is_public).length}
+                    {visualizations.reduce((sum, v) => sum + (v.views_count || 0), 0)}
                   </span>
                 </div>
               </div>
@@ -355,7 +357,7 @@ function UserProfileHub() {
               <div className="flex items-center gap-4">
                 <TextField label="" helpText="" icon={<FeatherSearch />}>
                   <TextField.Input
-                    placeholder="Search visualizations"
+                    placeholder="Search by title, description, or tags..."
                     value={searchTerm}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
                       setSearchTerm(e.target.value)}
@@ -422,9 +424,16 @@ function UserProfileHub() {
                     key={viz.id}
                     className={`${
                       viewMode === "grid"
-                        ? "flex flex-col overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm"
+                        ? "flex flex-col overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm cursor-pointer hover:shadow-md transition-shadow"
                         : "flex items-center gap-4 p-4 rounded-md border border-solid border-neutral-border bg-default-background shadow-sm"
                     }`}
+                    onClick={(e) => {
+                      // Only navigate if clicking on the card itself, not on buttons
+                      if (viewMode === "grid" && 
+                          !(e.target as HTMLElement).closest('button')) {
+                        handleLoadVisualization(viz.id);
+                      }
+                    }}
                   >
                     {/* Visualization preview */}
                     <div className={`${
