@@ -11,7 +11,6 @@ export interface CreateVisualizationData {
   settings: Record<string, any>;
   audio_file_url?: string;
   audio_file_name?: string;
-  category?: string;
   tags?: string[];
   is_public?: boolean;
   is_draft?: boolean;
@@ -21,7 +20,6 @@ export interface CreateVisualizationData {
 export async function getPublicVisualizations(
   page = 0,
   limit = 12,
-  category?: string,
   sortBy: 'created_at' | 'likes_count' | 'views_count' = 'created_at'
 ) {
   let query = supabase
@@ -38,10 +36,6 @@ export async function getPublicVisualizations(
     `)
     .eq('is_public', true)
     .range(page * limit, (page + 1) * limit - 1);
-
-  if (category && category !== 'all') {
-    query = query.eq('category', category);
-  }
 
   query = query.order(sortBy, { ascending: false });
 

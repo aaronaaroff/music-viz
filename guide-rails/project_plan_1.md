@@ -104,25 +104,23 @@
 **Status:** Addressing critical functionality issues
 
 **Tasks:**
-- [ ] Fix audio file not persisting on page refresh/update
-- [ ] Fix microphone input not triggering visualizations properly
-- [ ] Remove microphone audio feedback (input only, no speaker output)
-- [ ] Verify preset system is fully removed
+- [ ] Fix uploaded audio file not persisting on page refresh (file input only)
 - [ ] Fix tags not persisting to database
 - [ ] Add tag validation (15 char limit, no URLs, edge cases)
-- [ ] Fix visualization initial responsiveness (immediate trigger on play)
-- [ ] Fix requirement to switch inputs to trigger visualizations
 
 **Completed:**
-- [x] Keyboard component functional and triggering visualizations
+- [x] Keyboard component functional and triggering visualizations immediately
+- [x] Microphone input triggering visualizations with no audio feedback
 - [x] Fixed dropdown z-index clipping issues
 - [x] Keyboard notes stop properly on release
+- [x] Preset system fully removed
+- [x] Visualization initial responsiveness fixed (immediate trigger)
+- [x] Fixed requirement to switch inputs to trigger visualizations
 
 **Technical Notes:**
-- Audio file persistence may need blob storage integration
-- Microphone should only capture input, not route to speakers
-- Visualization triggering should be automatic on audio play
+- Audio file persistence for uploaded files (Phase 1 scope: file uploads only, not microphone recordings or keyboard compositions)
 - Tag validation should include sanitization and length limits
+- Microphone and keyboard real-time audio persistence moved to Phase 2
 
 ---
 

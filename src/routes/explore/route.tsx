@@ -85,7 +85,6 @@ function ExplorePage() {
       const { data, error } = await getPublicVisualizations(
         0, 
         50, 
-        selectedCategory === 'all' ? undefined : selectedCategory,
         sortMap[sortBy] as any
       );
       
@@ -115,10 +114,7 @@ function ExplorePage() {
       );
     }
     
-    // Category filter
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(viz => viz.category === selectedCategory);
-    }
+    // Note: Category filter removed - using tags instead
     
     // Following filter
     if (filterByFollowing && user) {

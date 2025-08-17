@@ -12,16 +12,15 @@ import { FeatherSearch } from "@subframe/core";
 import { ToggleGroup } from "@/ui/components/ToggleGroup";
 import { FeatherLayoutGrid } from "@subframe/core";
 import { FeatherLayoutList } from "@subframe/core";
-import { FeatherPlay } from "@subframe/core";
-import { Badge } from "@/ui/components/Badge";
 import { FeatherSettings } from "@subframe/core";
-import { FeatherEdit2 } from "@subframe/core";
-import { FeatherTrash2 } from "@subframe/core";
 import { FeatherImage } from "@subframe/core";
+import { FeatherEdit3 } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getUserVisualizations, deleteVisualization } from "@/lib/api/visualizations";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
+import { VisualizationCard } from "@/components/VisualizationCard";
+import { uploadImage } from "@/lib/api/imageFiles";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
   profiles?: { username: string | null; full_name: string | null; avatar_url: string | null } | null;
@@ -46,6 +45,10 @@ function UserProfileHub() {
     username: "",
     bio: ""
   });
+  
+  // File upload refs
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const bannerInputRef = React.useRef<HTMLInputElement>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -168,6 +171,46 @@ function UserProfileHub() {
     navigate(`/?load=${vizId}`);
   };
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    try {
+      const result = await uploadImage({
+        file,
+        userId: user.id,
+        type: 'avatar'
+      });
+
+      // Update profile with new avatar URL
+      await updateProfile({ avatar_url: result.url });
+      console.log('Avatar uploaded successfully:', result.url);
+    } catch (error) {
+      console.error('Avatar upload failed:', error);
+      // You could add toast notification here
+    }
+  };
+
+  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    try {
+      const result = await uploadImage({
+        file,
+        userId: user.id,
+        type: 'banner'
+      });
+
+      // Update profile with new banner URL
+      await updateProfile({ banner_url: result.url });
+      console.log('Banner uploaded successfully:', result.url);
+    } catch (error) {
+      console.error('Banner upload failed:', error);
+      // You could add toast notification here
+    }
+  };
+
   if (loading) {
     return (
       <DefaultPageLayout>
@@ -183,7 +226,6 @@ function UserProfileHub() {
   }
 
   const displayName = profile?.full_name || profile?.username || user.email?.split('@')[0] || 'User';
-  const username = profile?.username || user.email?.split('@')[0] || 'user';
 
   return (
     <DefaultPageLayout>
@@ -211,18 +253,55 @@ function UserProfileHub() {
           <div className="flex w-full flex-col items-start gap-12">
             {/* Profile header */}
             <div className="flex w-full flex-col items-start gap-4 relative">
-              <img
-                className="h-60 w-full flex-none rounded-md object-cover"
-                src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"
-                alt="Profile banner"
+              <div 
+                className={`relative h-60 w-full flex-none rounded-md overflow-hidden ${
+                  isEditingProfile ? 'cursor-pointer group' : ''
+                }`}
+                onClick={() => isEditingProfile && bannerInputRef.current?.click()}
+              >
+                <img
+                  className="h-full w-full object-cover"
+                  src={profile?.banner_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
+                  alt="Profile banner"
+                />
+                {isEditingProfile && (
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center">
+                    <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-2xl" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleBannerUpload}
+                className="hidden"
               />
-              <div className="flex flex-col items-start gap-4 rounded-full border-2 border-solid border-default-background shadow-lg absolute left-4 -bottom-4">
-                <Avatar
-                  size="x-large"
-                  image={profile?.avatar_url || undefined}
-                >
-                  {displayName.charAt(0).toUpperCase()}
-                </Avatar>
+              <div className={`flex flex-col items-start gap-4 rounded-full border-2 border-solid border-default-background shadow-lg absolute left-4 -bottom-4 ${
+                isEditingProfile ? 'cursor-pointer group' : ''
+              }`}
+              onClick={() => isEditingProfile && avatarInputRef.current?.click()}
+              >
+                <div className="relative">
+                  <Avatar
+                    size="x-large"
+                    image={profile?.avatar_url || undefined}
+                  >
+                    {displayName.charAt(0).toUpperCase()}
+                  </Avatar>
+                  {isEditingProfile && (
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center rounded-full">
+                      <FeatherEdit3 className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
               </div>
             </div>
             
@@ -355,7 +434,7 @@ function UserProfileHub() {
               </div>
               
               <div className="flex items-center gap-4">
-                <TextField label="" helpText="" icon={<FeatherSearch />}>
+                <TextField label="" helpText="" icon={<FeatherSearch />} className="min-w-[300px]">
                   <TextField.Input
                     placeholder="Search by title, description, or tags..."
                     value={searchTerm}
@@ -420,94 +499,15 @@ function UserProfileHub() {
                   : "flex flex-col gap-4"
               }`}>
                 {filteredVisualizations.map((viz) => (
-                  <div
+                  <VisualizationCard
                     key={viz.id}
-                    className={`${
-                      viewMode === "grid"
-                        ? "flex flex-col overflow-hidden rounded-md border border-solid border-neutral-border bg-default-background shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                        : "flex items-center gap-4 p-4 rounded-md border border-solid border-neutral-border bg-default-background shadow-sm"
-                    }`}
-                    onClick={(e) => {
-                      // Only navigate if clicking on the card itself, not on buttons
-                      if (viewMode === "grid" && 
-                          !(e.target as HTMLElement).closest('button')) {
-                        handleLoadVisualization(viz.id);
-                      }
-                    }}
-                  >
-                    {/* Visualization preview */}
-                    <div className={`${
-                      viewMode === "grid" 
-                        ? "relative w-full h-48 bg-black rounded-t-md" 
-                        : "relative w-24 h-24 bg-black rounded-md flex-shrink-0"
-                    }`}>
-                      {/* Placeholder for visualization preview */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <FeatherImage className="text-subtext-color text-2xl" />
-                      </div>
-                      <div className="absolute top-2 right-2 flex gap-2">
-                        <IconButton
-                          size="small"
-                          variant="inverse"
-                          icon={<FeatherPlay />}
-                          onClick={() => handleLoadVisualization(viz.id)}
-                        />
-                        <IconButton
-                          size="small"
-                          variant="inverse"
-                          icon={<FeatherTrash2 />}
-                          onClick={() => handleDeleteVisualization(viz.id)}
-                        />
-                      </div>
-                      {!viz.is_public && (
-                        <Badge className="absolute bottom-2 left-2" variant="neutral">
-                          Draft
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {/* Visualization info */}
-                    <div className={`${
-                      viewMode === "grid" 
-                        ? "flex w-full flex-col gap-2 p-4" 
-                        : "flex flex-col gap-1 flex-1 min-w-0"
-                    }`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-body-bold font-body-bold text-default-font truncate">
-                          {viz.title}
-                        </span>
-                        {viewMode === "list" && (
-                          <div className="flex gap-1 flex-shrink-0">
-                            <IconButton
-                              size="small"
-                              icon={<FeatherEdit2 />}
-                              onClick={() => handleLoadVisualization(viz.id)}
-                            />
-                            <IconButton
-                              size="small"
-                              icon={<FeatherTrash2 />}
-                              onClick={() => handleDeleteVisualization(viz.id)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {viz.description && (
-                        <span className="text-caption font-caption text-subtext-color line-clamp-2">
-                          {viz.description}
-                        </span>
-                      )}
-                      
-                      <div className="flex items-center justify-between text-caption font-caption text-subtext-color">
-                        <span>
-                          {viz.audio_file_name || 'No audio file'}
-                        </span>
-                        <span>
-                          {new Date(viz.updated_at || viz.created_at || '').toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    visualization={viz}
+                    viewMode={viewMode}
+                    onLoad={handleLoadVisualization}
+                    onDelete={handleDeleteVisualization}
+                    isOwner={true}
+                    showCreator={false}
+                  />
                 ))}
               </div>
             )}
