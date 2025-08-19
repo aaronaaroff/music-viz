@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Popover, PopoverItem, PopoverLabel, PopoverSeparator } from "@/components/Popover";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
+import { DraggableVisualizationCard } from "@/components/DraggableVisualizationCard";
+import { DroppableFolderItem } from "@/components/DroppableFolderItem";
+import { CustomDragLayer } from "@/components/CustomDragLayer";
 import { TextField } from "@/ui/components/TextField";
 import { FeatherSearch } from "@subframe/core";
 import { ToggleGroup } from "@/ui/components/ToggleGroup";
@@ -28,6 +31,7 @@ import { FeatherChevronRight } from "@subframe/core";
 import { FeatherChevronDown } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getSavedVisualizations, toggleSave } from "@/lib/api/visualizations";
+import { getUserFolders, getFolderContents, createFolder as createFolderAPI, updateFolder as updateFolderAPI, deleteFolder as deleteFolderAPI, addVisualizationToFolder, removeVisualizationFromFolder } from "@/lib/api/folders";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
 
@@ -71,18 +75,22 @@ function SavedPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   
-  // Redirect if not authenticated
+  // Redirect if not authenticated - only after auth is fully loaded
   useEffect(() => {
     if (!loading && !user) {
+      // Store the current path so we can return here after signin
+      sessionStorage.setItem('redirectPath', '/saved');
       navigate('/auth/signin');
     }
   }, [user, loading, navigate]);
   
-  // Load saved visualizations
+  // Load saved visualizations and folders
   useEffect(() => {
     if (user) {
       loadSavedVisualizations();
+      loadFolders();
     }
   }, [user]);
   
@@ -102,6 +110,43 @@ function SavedPage() {
       console.error('Error loading saved visualizations:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFolders = async () => {
+    if (!user) return;
+    
+    try {
+      // Load folders
+      const { data: foldersData, error: foldersError } = await getUserFolders(user.id);
+      
+      if (foldersError) {
+        console.error('Error loading folders:', foldersError);
+        return;
+      }
+      
+      // Load folder contents
+      const { data: contentsData, error: contentsError } = await getFolderContents(user.id);
+      
+      if (contentsError) {
+        console.error('Error loading folder contents:', contentsError);
+      }
+      
+      if (foldersData) {
+        const loadedFolders: Folder[] = [
+          { id: 'all', name: 'All Saved', color: 'neutral', visualizationIds: [], isExpanded: true },
+          ...foldersData.map((folder: any) => ({
+            id: folder.id,
+            name: folder.name,
+            color: folder.color,
+            visualizationIds: contentsData?.[folder.id] || [],
+            isExpanded: true
+          }))
+        ];
+        setFolders(loadedFolders);
+      }
+    } catch (error) {
+      console.error('Error loading folders:', error);
     }
   };
   
@@ -162,37 +207,67 @@ function SavedPage() {
   };
   
   // Folder management
-  const createFolder = () => {
-    if (!newFolderName.trim()) return;
+  const createFolder = async () => {
+    if (!newFolderName.trim() || !user) return;
     
-    const newFolder: Folder = {
-      id: Date.now().toString(),
-      name: newFolderName,
-      color: 'neutral',
-      visualizationIds: [],
-      isExpanded: true
-    };
-    
-    setFolders(prev => [...prev, newFolder]);
-    setNewFolderName("");
-    setIsCreatingFolder(false);
+    try {
+      const { data, error } = await createFolderAPI({
+        name: newFolderName.trim(),
+        color: '#6B7280'
+      });
+      
+      if (!error && data) {
+        const newFolder: Folder = {
+          id: data.id,
+          name: data.name,
+          color: data.color,
+          visualizationIds: [],
+          isExpanded: true
+        };
+        
+        setFolders(prev => [...prev, newFolder]);
+        setNewFolderName("");
+        setIsCreatingFolder(false);
+      }
+    } catch (error) {
+      console.error('Error creating folder:', error);
+    }
   };
   
-  const updateFolder = (folderId: string) => {
-    if (!editingFolderName.trim()) return;
+  const updateFolder = async (folderId: string) => {
+    if (!editingFolderName.trim() || !user) return;
     
-    setFolders(prev => prev.map(folder => 
-      folder.id === folderId ? { ...folder, name: editingFolderName } : folder
-    ));
-    setEditingFolderId(null);
-    setEditingFolderName("");
+    try {
+      const { error } = await updateFolderAPI(folderId, {
+        name: editingFolderName.trim()
+      });
+      
+      if (!error) {
+        setFolders(prev => prev.map(folder => 
+          folder.id === folderId ? { ...folder, name: editingFolderName } : folder
+        ));
+        setEditingFolderId(null);
+        setEditingFolderName("");
+      }
+    } catch (error) {
+      console.error('Error updating folder:', error);
+    }
   };
   
-  const deleteFolder = (folderId: string) => {
-    if (folderId === 'all' || folderId === 'favorites') return; // Protect default folders
-    setFolders(prev => prev.filter(folder => folder.id !== folderId));
-    if (selectedFolder === folderId) {
-      setSelectedFolder('all');
+  const deleteFolder = async (folderId: string) => {
+    if (folderId === 'all' || !user) return; // Protect "All Saved" folder
+    
+    try {
+      const { error } = await deleteFolderAPI(folderId);
+      
+      if (!error) {
+        setFolders(prev => prev.filter(folder => folder.id !== folderId));
+        if (selectedFolder === folderId) {
+          setSelectedFolder('all');
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting folder:', error);
     }
   };
   
@@ -213,6 +288,26 @@ function SavedPage() {
       return folder;
     }));
   };
+
+  const handleDragDrop = async (visualizationId: string, folderId: string) => {
+    if (!user || folderId === 'all') return; // Can't add to "All Saved"
+    
+    try {
+      const { error } = await addVisualizationToFolder(visualizationId, folderId);
+      
+      if (!error) {
+        // Update local state
+        setFolders(prev => prev.map(folder => {
+          if (folder.id === folderId && !folder.visualizationIds.includes(visualizationId)) {
+            return { ...folder, visualizationIds: [...folder.visualizationIds, visualizationId] };
+          }
+          return folder;
+        }));
+      }
+    } catch (error) {
+      console.error('Error adding to folder:', error);
+    }
+  };
   
   const renderVisualizationCard = (viz: Visualization) => {
     const inFolders = folders.filter(f => f.id !== 'all' && f.visualizationIds.includes(viz.id));
@@ -227,13 +322,18 @@ function SavedPage() {
     };
     
     return (
-      <div
+      <DraggableVisualizationCard
         key={viz.id}
-        className={`flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 transition-shadow ${
-          viewMode === 'grid' ? 'cursor-pointer hover:shadow-md' : ''
-        }`}
-        onClick={handleCardClick}
+        visualization={viz}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setIsDragging(false)}
       >
+        <div
+          className={`flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 transition-shadow ${
+            viewMode === 'grid' ? 'cursor-pointer hover:shadow-md' : ''
+          } ${isDragging ? 'pointer-events-none' : ''}`}
+          onClick={handleCardClick}
+        >
         {/* Visualization preview */}
         <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-md bg-black">
           <img
@@ -302,7 +402,12 @@ function SavedPage() {
             <Avatar
               size="small"
               image={viz.profiles?.avatar_url || undefined}
-              onClick={() => navigate(`/profile/${viz.profiles?.username}`)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (viz.profiles?.username) {
+                  navigate(`/profile/${viz.profiles.username}`);
+                }
+              }}
               className="cursor-pointer hover:opacity-80"
             >
               {(viz.profiles?.full_name?.[0] || viz.profiles?.username?.[0] || 'U').toUpperCase()}
@@ -311,7 +416,15 @@ function SavedPage() {
               <span className="text-body-bold font-body-bold text-default-font">
                 {viz.title}
               </span>
-              <span className="text-caption font-caption text-subtext-color">
+              <span 
+                className="text-caption font-caption text-subtext-color cursor-pointer hover:text-brand-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (viz.profiles?.username) {
+                    navigate(`/profile/${viz.profiles.username}`);
+                  }
+                }}
+              >
                 by {viz.profiles?.full_name || viz.profiles?.username || 'Unknown'}
               </span>
             </div>
@@ -320,13 +433,18 @@ function SavedPage() {
         
         {/* Folder badges */}
         {inFolders.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {inFolders.map(folder => (
-              <Badge key={folder.id} variant="neutral">
-                <FeatherFolder className="w-3 h-3" />
+          <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[calc(100%-16px)]">
+            {inFolders.slice(0, 2).map(folder => (
+              <Badge key={folder.id} variant="neutral" className="text-xs">
+                <FeatherFolder className="w-2 h-2" />
                 {folder.name}
               </Badge>
             ))}
+            {inFolders.length > 2 && (
+              <Badge variant="neutral" className="text-xs">
+                +{inFolders.length - 2}
+              </Badge>
+            )}
           </div>
         )}
         
@@ -346,7 +464,8 @@ function SavedPage() {
             Saved {viz.saved_at ? new Date(viz.saved_at).toLocaleDateString() : 'recently'}
           </span>
         </div>
-      </div>
+        </div>
+      </DraggableVisualizationCard>
     );
   };
   
@@ -356,6 +475,7 @@ function SavedPage() {
   
   return (
     <DefaultPageLayout>
+      <CustomDragLayer />
       <div className="flex h-full w-full flex-col items-start overflow-hidden">
         {/* Header */}
         <div className="flex w-full items-center justify-between border-b border-solid border-neutral-border px-8 py-2">
@@ -438,7 +558,7 @@ function SavedPage() {
           {/* Filters sidebar */}
           <div className={`flex flex-col items-start gap-6 self-stretch border-l border-solid border-neutral-border px-6 py-6 overflow-auto transition-all duration-300 ${
             showFilters ? 'w-[320px] opacity-100' : 'w-0 opacity-0 px-0'
-          }`}>
+          } ${isDragging ? 'bg-brand-25' : ''}`}>
             {showFilters && (
               <>
                 {/* Folders */}
@@ -454,6 +574,15 @@ function SavedPage() {
                     />
                   </div>
                   
+                  {/* Drag hint */}
+                  {isDragging && (
+                    <div className="w-full p-2 bg-brand-100 border border-brand-300 rounded-md">
+                      <span className="text-caption font-caption text-brand-700">
+                        Drop visualization on any folder to organize it
+                      </span>
+                    </div>
+                  )}
+                  
                   {/* Create new folder input */}
                   {isCreatingFolder && (
                     <div className="flex w-full items-center gap-2">
@@ -462,7 +591,7 @@ function SavedPage() {
                           placeholder="Folder name..."
                           value={newFolderName}
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
-                          onKeyPress={(e: React.KeyboardEvent) => {
+                          onKeyDown={(e: React.KeyboardEvent) => {
                             if (e.key === 'Enter') createFolder();
                             if (e.key === 'Escape') {
                               setIsCreatingFolder(false);
@@ -492,12 +621,17 @@ function SavedPage() {
                   <div className="flex w-full flex-col items-start gap-1">
                     {folders.map(folder => (
                       <div key={folder.id} className="flex w-full flex-col">
-                        <div
-                          className={`flex w-full items-center justify-between px-3 py-2 rounded-md cursor-pointer hover:bg-neutral-50 ${
-                            selectedFolder === folder.id ? 'bg-brand-50' : ''
-                          }`}
-                          onClick={() => setSelectedFolder(folder.id === selectedFolder ? 'all' : folder.id)}
+                        <DroppableFolderItem
+                          folderId={folder.id}
+                          onDrop={handleDragDrop}
+                          isSelected={selectedFolder === folder.id}
                         >
+                          <div
+                            className={`flex w-full items-center justify-between px-3 py-2 rounded-md cursor-pointer hover:bg-neutral-50 ${
+                              selectedFolder === folder.id ? 'bg-brand-50' : ''
+                            }`}
+                            onClick={() => setSelectedFolder(folder.id === selectedFolder ? 'all' : folder.id)}
+                          >
                           <div className="flex items-center gap-2">
                             <IconButton
                               size="small"
@@ -513,7 +647,7 @@ function SavedPage() {
                                 <TextField.Input
                                   value={editingFolderName}
                                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingFolderName(e.target.value)}
-                                  onKeyPress={(e: React.KeyboardEvent) => {
+                                  onKeyDown={(e: React.KeyboardEvent) => {
                                     if (e.key === 'Enter') updateFolder(folder.id);
                                     if (e.key === 'Escape') {
                                       setEditingFolderId(null);
@@ -553,7 +687,8 @@ function SavedPage() {
                               />
                             </div>
                           )}
-                        </div>
+                          </div>
+                        </DroppableFolderItem>
                         {folder.isExpanded && folder.visualizationIds.length > 0 && (
                           <div className="ml-8 text-caption font-caption text-subtext-color">
                             {folder.visualizationIds.length} items

@@ -137,14 +137,8 @@ const DefaultPageLayoutRoot = React.forwardRef((
                     {user ? (
                       <>
                         <DropdownMenu.DropdownItem 
-                          icon={<FeatherUserPlus />}
-                          onClick={() => console.log("Invite team clicked")}
-                        >
-                          Invite team
-                        </DropdownMenu.DropdownItem>
-                        <DropdownMenu.DropdownItem 
                           icon={<FeatherSettings />}
-                          onClick={() => console.log("Settings clicked")}
+                          onClick={() => navigate('/settings')}
                         >
                           Settings
                         </DropdownMenu.DropdownItem>

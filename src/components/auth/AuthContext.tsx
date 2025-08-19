@@ -152,9 +152,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Handle tab visibility changes
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      // Only refresh if it's been more than 5 minutes AND we currently have a user
-      if (!document.hidden && user && Date.now() - lastRefresh > 300000) {
-        console.log('Tab became visible after 5+ minutes, validating auth state...');
+      // Only refresh if it's been more than 30 seconds AND we currently have a user
+      if (!document.hidden && user && Date.now() - lastRefresh > 30000) {
+        console.log('Tab became visible after 30+ seconds, validating auth state...');
         
         try {
           // Just validate the session without disrupting the current state
@@ -176,8 +176,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           console.error('Error validating auth on tab focus:', error);
         }
-      } else if (!document.hidden) {
-        // Tab became visible but not enough time passed, just update timestamp
+      } else if (!document.hidden && user) {
+        // Tab became visible but not enough time passed, do a quick session check
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (!currentSession?.user && user) {
+            // Session expired, clear state immediately
+            console.log('Quick session check: session expired, clearing auth state');
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (error) {
+          console.warn('Quick session check failed:', error);
+        }
         setLastRefresh(Date.now());
       }
     };
@@ -204,12 +216,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Handle network reconnection - check auth state when online again
+    const handleOnline = async () => {
+      if (user) {
+        console.log('Network reconnected, validating auth state...');
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (!currentSession?.user && user) {
+            console.log('Network reconnection: session expired, clearing auth state');
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (error) {
+          console.warn('Network reconnection auth check failed:', error);
+        }
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('online', handleOnline);
     };
   }, [user, lastRefresh]);
 

@@ -12,8 +12,11 @@
   "dependencies": {
     "@subframe/core": "1.145.0",
     "@supabase/supabase-js": "^2.52.0",
+    "@types/react-dnd": "^3.0.2",
     "framer-motion": "^12.23.6",
     "react": "^19.1.0",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {

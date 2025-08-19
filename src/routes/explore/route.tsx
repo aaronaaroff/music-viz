@@ -22,8 +22,10 @@ import { FeatherSend } from "@subframe/core";
 import { FeatherUser } from "@subframe/core";
 import { FeatherMusic } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getPublicVisualizations, toggleLike, toggleSave, createComment, getVisualizationComments } from "@/lib/api/visualizations";
+import { getPublicVisualizations, toggleLike, toggleSave, createComment, getVisualizationComments, saveToFolder } from "@/lib/api/visualizations";
 import { useNavigate } from "react-router-dom";
+import { FolderSelectionPopover } from "@/components/FolderSelectionPopover";
+import { getTrendingCreators, toggleFollow, checkIsFollowing, getFollowing } from "@/lib/api/follows";
 import type { Database } from "@/lib/database.types";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
@@ -54,12 +56,14 @@ function ExplorePage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"trending" | "recent" | "popular">("trending");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [durationRange, setDurationRange] = useState([50]);
   const [showFilters, setShowFilters] = useState(true);
   const [expandedVisualizationId, setExpandedVisualizationId] = useState<string | null>(null);
   const [comments, setComments] = useState<{ [key: string]: Comment[] }>({});
   const [newComment, setNewComment] = useState("");
   const [filterByFollowing, setFilterByFollowing] = useState(false);
+  const [trendingCreators, setTrendingCreators] = useState<any[]>([]);
+  const [followingStatus, setFollowingStatus] = useState<Record<string, boolean>>({});
+  const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
   
   // Animation refs
   const expandedRef = useRef<HTMLDivElement>(null);
@@ -67,10 +71,14 @@ function ExplorePage() {
   // Categories
   const categories = ["all", "ambient", "electronic", "hip-hop", "rock", "jazz", "classical", "experimental"];
   
-  // Load visualizations
+  // Load visualizations and following list
   useEffect(() => {
     loadVisualizations();
-  }, [sortBy]);
+    loadTrendingCreators();
+    if (user) {
+      loadFollowing();
+    }
+  }, [sortBy, user]);
   
   const loadVisualizations = async () => {
     setLoading(true);
@@ -98,6 +106,49 @@ function ExplorePage() {
       setLoading(false);
     }
   };
+
+  const loadTrendingCreators = async () => {
+    try {
+      const { data, error } = await getTrendingCreators(5);
+      
+      if (!error && data) {
+        setTrendingCreators(data);
+        
+        // Load following status for each creator
+        if (user) {
+          const statusPromises = data.map(async (creator: any) => {
+            const { isFollowing } = await checkIsFollowing(creator.id);
+            return { id: creator.id, isFollowing };
+          });
+          
+          const statuses = await Promise.all(statusPromises);
+          const statusMap = statuses.reduce((acc: Record<string, boolean>, status: any) => {
+            acc[status.id] = status.isFollowing;
+            return acc;
+          }, {} as Record<string, boolean>);
+          
+          setFollowingStatus(statusMap);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading trending creators:', error);
+    }
+  };
+
+  const loadFollowing = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await getFollowing();
+      
+      if (!error && data) {
+        const followingIds = data.map((profile: any) => profile.id);
+        setFollowingUserIds(followingIds);
+      }
+    } catch (error) {
+      console.error('Error loading following list:', error);
+    }
+  };
   
   // Filter visualizations
   useEffect(() => {
@@ -117,12 +168,13 @@ function ExplorePage() {
     
     // Following filter
     if (filterByFollowing && user) {
-      // In a real app, you'd filter by followed users
-      // For now, this is a placeholder
+      filtered = filtered.filter(viz => 
+        viz.user_id && followingUserIds.includes(viz.user_id)
+      );
     }
     
     setFilteredVisualizations(filtered);
-  }, [visualizations, searchTerm, selectedCategory, filterByFollowing, user]);
+  }, [visualizations, searchTerm, selectedCategory, filterByFollowing, user, followingUserIds]);
   
   // Handle like
   const handleLike = async (visualizationId: string) => {
@@ -153,28 +205,77 @@ function ExplorePage() {
   };
   
   // Handle save
-  const handleSave = async (visualizationId: string) => {
+  const handleSaveToFolder = async (visualizationId: string, folderId: string) => {
     if (!user) {
       navigate('/auth/signin');
       return;
     }
     
     try {
-      const { isSaved, error } = await toggleSave(visualizationId);
+      const { error } = await saveToFolder(visualizationId, folderId);
       if (!error) {
-        // Update local state
+        // Update local state to show as saved
         setVisualizations(prev => prev.map(viz => {
           if (viz.id === visualizationId) {
             return {
               ...viz,
-              user_saved: isSaved ? [{ user_id: user.id }] : []
+              user_saved: [{ user_id: user.id }]
             };
           }
           return viz;
         }));
       }
     } catch (error) {
-      console.error('Error toggling save:', error);
+      console.error('Error saving to folder:', error);
+    }
+  };
+
+  const handleUnsave = async (visualizationId: string) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await toggleSave(visualizationId);
+      if (!error) {
+        // Update local state to show as unsaved
+        setVisualizations(prev => prev.map(viz => {
+          if (viz.id === visualizationId) {
+            return {
+              ...viz,
+              user_saved: []
+            };
+          }
+          return viz;
+        }));
+      }
+    } catch (error) {
+      console.error('Error unsaving visualization:', error);
+    }
+  };
+
+  const handleToggleFollow = async (userId: string) => {
+    if (!user) {
+      navigate('/auth/signin');
+      return;
+    }
+    
+    try {
+      const { isFollowing, error } = await toggleFollow(userId);
+      
+      if (!error) {
+        setFollowingStatus(prev => ({
+          ...prev,
+          [userId]: isFollowing
+        }));
+        
+        // Update following list
+        if (isFollowing) {
+          setFollowingUserIds(prev => [...prev, userId]);
+        } else {
+          setFollowingUserIds(prev => prev.filter(id => id !== userId));
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error);
     }
   };
   
@@ -238,8 +339,8 @@ function ExplorePage() {
   
   const renderVisualizationCard = (viz: Visualization) => {
     const isExpanded = expandedVisualizationId === viz.id;
-    const isLiked = user && viz.user_liked?.some(like => like.user_id === user.id);
-    const isSaved = user && viz.user_saved?.some(save => save.user_id === user.id);
+    const isLiked = user && viz.user_liked?.some((like: any) => like.user_id === user.id);
+    const isSaved = user && viz.user_saved?.some((save: any) => save.user_id === user.id);
     
     const handleCardClick = (e: React.MouseEvent) => {
       // Only navigate if clicking on the card itself in grid mode, not on buttons
@@ -284,7 +385,12 @@ function ExplorePage() {
                 <Avatar
                   size="small"
                   image={viz.profiles?.avatar_url || undefined}
-                  onClick={() => navigate(`/profile/${viz.profiles?.username}`)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (viz.profiles?.username) {
+                      navigate(`/profile/${viz.profiles.username}`);
+                    }
+                  }}
                   className="cursor-pointer hover:opacity-80"
                 >
                   {(viz.profiles?.full_name?.[0] || viz.profiles?.username?.[0] || 'U').toUpperCase()}
@@ -293,7 +399,15 @@ function ExplorePage() {
                   <span className="text-body-bold font-body-bold text-default-font">
                     {viz.title}
                   </span>
-                  <span className="text-caption font-caption text-subtext-color">
+                  <span 
+                    className="text-caption font-caption text-subtext-color cursor-pointer hover:text-brand-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (viz.profiles?.username) {
+                        navigate(`/profile/${viz.profiles.username}`);
+                      }
+                    }}
+                  >
                     by {viz.profiles?.full_name || viz.profiles?.username || 'Unknown'}
                   </span>
                 </div>
@@ -331,14 +445,28 @@ function ExplorePage() {
                   {viz.comments_count || 0}
                 </Button>
               </div>
-              <IconButton
-                variant={isSaved ? "brand-primary" : "neutral-primary"}
-                icon={<FeatherBookmark />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSave(viz.id);
-                }}
-              />
+              {isSaved ? (
+                <IconButton
+                  variant="brand-primary"
+                  icon={<FeatherBookmark />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUnsave(viz.id);
+                  }}
+                />
+              ) : (
+                <FolderSelectionPopover
+                  trigger={
+                    <IconButton
+                      variant="neutral-primary"
+                      icon={<FeatherBookmark />}
+                    />
+                  }
+                  onFolderSelect={(folderId: string) => handleSaveToFolder(viz.id, folderId)}
+                  visualizationId={viz.id}
+                  isSaved={isSaved}
+                />
+              )}
             </div>
           </div>
           
@@ -362,7 +490,7 @@ function ExplorePage() {
                       placeholder="Add a comment..."
                       value={newComment}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewComment(e.target.value)}
-                      onKeyPress={(e: React.KeyboardEvent) => {
+                      onKeyDown={(e: React.KeyboardEvent) => {
                         if (e.key === 'Enter' && newComment.trim()) {
                           handleAddComment(viz.id);
                         }
@@ -535,55 +663,45 @@ function ExplorePage() {
                   </ToggleGroup>
                 </div>
                 
-                {/* Duration filter */}
-                <div className="flex w-full flex-col items-start gap-3">
-                  <span className="text-body-bold font-body-bold text-default-font">
-                    Duration
-                  </span>
-                  <Slider
-                    value={durationRange}
-                    onValueChange={setDurationRange}
-                  />
-                  <div className="flex w-full items-center justify-between">
-                    <span className="text-caption font-caption text-subtext-color">
-                      0:30
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      10:00
-                    </span>
-                  </div>
-                </div>
-                
                 {/* Trending Creators */}
                 <div className="flex w-full flex-col items-start gap-3">
                   <span className="text-body-bold font-body-bold text-default-font">
                     Trending Creators
                   </span>
-                  <div className="flex w-full flex-col items-start gap-4">
-                    {[
-                      { name: 'Alex Rivers', username: 'alexrivers', avatar: 'A' },
-                      { name: 'Sarah Chen', username: 'sarahchen', avatar: 'S' },
-                      { name: 'Mike Thomson', username: 'mikethomson', avatar: 'M' }
-                    ].map(creator => (
-                      <div key={creator.username} className="flex w-full items-center gap-4">
-                        <Avatar className="cursor-pointer" onClick={() => navigate(`/profile/${creator.username}`)}>
-                          {creator.avatar}
-                        </Avatar>
-                        <div className="flex grow shrink-0 basis-0 flex-col items-start">
-                          <span className="text-body-bold font-body-bold text-default-font">
-                            {creator.name}
-                          </span>
-                          <span className="text-caption font-caption text-subtext-color">
-                            @{creator.username}
-                          </span>
-                        </div>
-                        <Button
-                          variant="neutral-primary"
-                          size="small"
-                          onClick={() => {}}
+                  <div className="flex w-full flex-col gap-2">
+                    {trendingCreators.map((creator) => (
+                      <div key={creator.id} className="flex items-center justify-between p-2 hover:bg-neutral-50 rounded-md">
+                        <div 
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                          onClick={() => creator.username && navigate(`/profile/${creator.username}`)}
                         >
-                          Follow
-                        </Button>
+                          <Avatar
+                            size="small"
+                            image={creator.avatar_url || undefined}
+                          >
+                            {(creator.full_name?.[0] || creator.username?.[0] || 'U').toUpperCase()}
+                          </Avatar>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-caption-bold font-caption-bold text-default-font truncate">
+                              {creator.full_name || creator.username || 'Unknown'}
+                            </span>
+                            <span className="text-caption font-caption text-subtext-color">
+                              {creator.followers_count || 0} followers • {creator.total_likes || 0} likes
+                            </span>
+                          </div>
+                        </div>
+                        {user && user.id !== creator.id && (
+                          <Button
+                            size="small"
+                            variant={followingStatus[creator.id] ? "brand-secondary" : "brand-primary"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleFollow(creator.id);
+                            }}
+                          >
+                            {followingStatus[creator.id] ? 'Following' : 'Follow'}
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>

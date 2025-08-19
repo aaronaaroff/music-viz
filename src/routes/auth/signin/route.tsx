@@ -10,7 +10,13 @@ function SignInPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) {
-      navigate('/');
+      const redirectPath = sessionStorage.getItem('redirectPath');
+      if (redirectPath) {
+        sessionStorage.removeItem('redirectPath');
+        navigate(redirectPath);
+      } else {
+        navigate('/');
+      }
     }
   }, [user, loading, navigate]);
 
@@ -30,7 +36,15 @@ function SignInPage() {
     <div className="flex h-screen w-full items-center justify-center bg-default-background">
       <AuthModal
         isOpen={true}
-        onClose={() => navigate('/')}
+        onClose={() => {
+          const redirectPath = sessionStorage.getItem('redirectPath');
+          if (redirectPath) {
+            sessionStorage.removeItem('redirectPath');
+            navigate(redirectPath);
+          } else {
+            navigate('/');
+          }
+        }}
         initialMode="signin"
       />
     </div>

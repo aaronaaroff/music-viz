@@ -286,6 +286,105 @@ export async function toggleSave(visualizationId: string) {
   }
 }
 
+// Save visualization to a specific folder
+export async function saveToFolder(visualizationId: string, folderId: string) {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { error: { message: 'User not authenticated' } };
+  }
+
+  try {
+    // First, ensure the visualization is saved
+    const { data: existingSave } = await supabase
+      .from('saves')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .eq('visualization_id', visualizationId)
+      .single();
+
+    let saveId = existingSave?.id;
+
+    if (!existingSave) {
+      // Create the save first
+      const { data: newSave, error: saveError } = await supabase
+        .from('saves')
+        .insert({
+          user_id: session.user.id,
+          visualization_id: visualizationId
+        })
+        .select('id')
+        .single();
+
+      if (saveError) {
+        return { error: saveError };
+      }
+      saveId = newSave.id;
+    }
+
+    // Now add to folder if not already there
+    const { data: existingFolderSave } = await supabase
+      .from('folder_saves')
+      .select('id')
+      .eq('folder_id', folderId)
+      .eq('save_id', saveId)
+      .single();
+
+    if (!existingFolderSave) {
+      const { error: folderError } = await supabase
+        .from('folder_saves')
+        .insert({
+          folder_id: folderId,
+          save_id: saveId
+        });
+
+      if (folderError) {
+        return { error: folderError };
+      }
+    }
+
+    return { isSaved: true, error: null };
+  } catch (error) {
+    console.error('Error saving to folder:', error);
+    return { error: { message: 'Failed to save to folder' } };
+  }
+}
+
+// Remove visualization from a specific folder
+export async function removeFromFolder(visualizationId: string, folderId: string) {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user) {
+    return { error: { message: 'User not authenticated' } };
+  }
+
+  try {
+    // Find the save record
+    const { data: save } = await supabase
+      .from('saves')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .eq('visualization_id', visualizationId)
+      .single();
+
+    if (!save) {
+      return { error: { message: 'Visualization not saved' } };
+    }
+
+    // Remove from folder
+    const { error } = await supabase
+      .from('folder_saves')
+      .delete()
+      .eq('folder_id', folderId)
+      .eq('save_id', save.id);
+
+    return { error };
+  } catch (error) {
+    console.error('Error removing from folder:', error);
+    return { error: { message: 'Failed to remove from folder' } };
+  }
+}
+
 // Get next available draft number for a user
 export async function getNextDraftNumber(userId: string): Promise<number> {
   const { data } = await supabase
