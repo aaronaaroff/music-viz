@@ -62,24 +62,30 @@ export function validateEmail(email: string): boolean {
 }
 
 export function validateUsername(username: string): { isValid: boolean; error?: string } {
-  if (!username) {
-    return { isValid: true }; // Username is optional
+  if (!username || username.trim() === '') {
+    return { isValid: false, error: 'Username is required' };
   }
   
-  if (username.length < 3) {
+  const trimmedUsername = username.trim();
+  
+  if (trimmedUsername.length < 3) {
     return { isValid: false, error: 'Username must be at least 3 characters long' };
   }
   
-  if (username.length > 30) {
+  if (trimmedUsername.length > 30) {
     return { isValid: false, error: 'Username must be less than 30 characters' };
   }
   
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-    return { isValid: false, error: 'Username can only contain letters, numbers, and underscores' };
+  if (!/^[a-zA-Z0-9_-]+$/.test(trimmedUsername)) {
+    return { isValid: false, error: 'Username can only contain letters, numbers, underscores, and hyphens' };
   }
   
-  if (/^\d/.test(username)) {
+  if (/^\d/.test(trimmedUsername)) {
     return { isValid: false, error: 'Username cannot start with a number' };
+  }
+  
+  if (/\s/.test(trimmedUsername)) {
+    return { isValid: false, error: 'Username cannot contain spaces' };
   }
   
   return { isValid: true };

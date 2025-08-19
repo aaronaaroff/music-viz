@@ -102,6 +102,11 @@ export async function checkIsFollowing(userId: string) {
     return { isFollowing: false, error: null };
   }
 
+  // Don't check if user is trying to follow themselves
+  if (session.user.id === userId) {
+    return { isFollowing: false, error: null };
+  }
+
   const { data, error } = await supabase
     .from('follows')
     .select('id')

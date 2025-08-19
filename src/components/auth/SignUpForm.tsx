@@ -51,8 +51,8 @@ export function SignUpForm({ onToggleMode, onClose }: SignUpFormProps) {
     e.preventDefault();
     
     // Validate all fields
-    if (!email || !password) {
-      setError('Please fill in all required fields');
+    if (!email || !password || !username) {
+      setError('Please fill in all required fields (email, password, and username)');
       return;
     }
 
@@ -75,7 +75,7 @@ export function SignUpForm({ onToggleMode, onClose }: SignUpFormProps) {
     setError(null);
 
     try {
-      const { error } = await signUp(email, password, fullName || undefined, username || undefined);
+      const { error } = await signUp(email, password, fullName || undefined, username);
       
       if (error) {
         // Handle specific Supabase auth errors
@@ -172,8 +172,9 @@ export function SignUpForm({ onToggleMode, onClose }: SignUpFormProps) {
           type="text"
           value={fullName}
           onChange={setFullName}
-          placeholder="Enter your full name"
+          placeholder="Enter your full name (optional)"
           disabled={loading}
+          helpText="Optional. This will be displayed instead of username"
         />
 
         <AuthTextField
@@ -184,7 +185,8 @@ export function SignUpForm({ onToggleMode, onClose }: SignUpFormProps) {
           placeholder="Choose a username"
           disabled={loading}
           error={!!usernameError}
-          helpText={usernameError || "Optional. Letters, numbers, and underscores only"}
+          helpText={usernameError || "Required. Letters, numbers, underscores, and hyphens only"}
+          required
         />
 
         {error && (

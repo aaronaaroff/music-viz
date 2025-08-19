@@ -259,6 +259,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName?: string, username?: string) => {
     try {
+      // Check if username is already taken
+      if (username) {
+        const { data: existingProfile, error: checkError } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('username', username)
+          .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+          // Error other than "not found"
+          return { error: { message: 'Failed to check username availability' } };
+        }
+
+        if (existingProfile) {
+          return { error: { message: 'Username is already taken' } };
+        }
+      }
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
