@@ -17,9 +17,11 @@ export interface Database {
           username: string | null
           full_name: string | null
           avatar_url: string | null
+          banner_url: string | null
           bio: string | null
           website: string | null
           social_links: Json | null
+          is_public: boolean
         }
         Insert: {
           id: string
@@ -28,9 +30,11 @@ export interface Database {
           username?: string | null
           full_name?: string | null
           avatar_url?: string | null
+          banner_url?: string | null
           bio?: string | null
           website?: string | null
           social_links?: Json | null
+          is_public?: boolean
         }
         Update: {
           id?: string
@@ -39,9 +43,11 @@ export interface Database {
           username?: string | null
           full_name?: string | null
           avatar_url?: string | null
+          banner_url?: string | null
           bio?: string | null
           website?: string | null
           social_links?: Json | null
+          is_public?: boolean
         }
       }
       visualizations: {
@@ -225,6 +231,35 @@ export interface Database {
           description?: string | null
           color?: string | null
           icon?: string | null
+        }
+      }
+      folders: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          name: string
+          color: string
+          saves_count: number
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          name: string
+          color: string
+          saves_count?: number
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          name?: string
+          color?: string
+          saves_count?: number
         }
       }
     }

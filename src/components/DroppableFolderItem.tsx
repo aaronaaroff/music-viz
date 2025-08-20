@@ -38,7 +38,7 @@ export function DroppableFolderItem({
 
   return (
     <div
-      ref={drop}
+      ref={drop as any}
       className={`
         transition-all duration-200
         ${isActive ? 'bg-brand-100 border-brand-300 scale-[1.02]' : ''}

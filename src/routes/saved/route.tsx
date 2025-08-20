@@ -108,7 +108,7 @@ function SavedPage() {
       if (error) {
         console.error('Error loading saved visualizations:', error);
       } else {
-        setVisualizations(data || []);
+        setVisualizations((data || []) as unknown as Visualization[]);
       }
     } catch (error) {
       console.error('Error loading saved visualizations:', error);
@@ -143,7 +143,7 @@ function SavedPage() {
             id: folder.id,
             name: folder.name,
             color: folder.color,
-            visualizationIds: contentsData?.[folder.id] || [],
+            visualizationIds: (contentsData as any)?.[folder.id] || [],
             isExpanded: true
           }))
         ];

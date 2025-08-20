@@ -1,5 +1,7 @@
 import type { AudioAnalysisData } from '../audio/types';
 
+export type { AudioAnalysisData };
+
 export enum VisualizationType {
   CIRCLE = 'circle',
   BARS = 'bars',

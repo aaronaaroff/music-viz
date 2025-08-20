@@ -268,7 +268,7 @@ function ExplorePage() {
       if (!error) {
         setFollowingStatus(prev => ({
           ...prev,
-          [userId]: isFollowing
+          [userId]: isFollowing ?? false
         }));
         
         // Update following list
@@ -468,7 +468,7 @@ function ExplorePage() {
                   }
                   onFolderSelect={(folderId: string) => handleSaveToFolder(viz.id, folderId)}
                   visualizationId={viz.id}
-                  isSaved={isSaved}
+                  isSaved={isSaved ?? false}
                 />
               )}
             </div>

@@ -156,7 +156,7 @@ export function VisualizationCard({
           <FeatherImage className="text-subtext-color" />
         </div>
         {!viz.is_public && (
-          <Badge className="absolute -top-1 -left-1" variant="neutral" size="small">
+          <Badge className="absolute -top-1 -left-1" variant="neutral">
             Draft
           </Badge>
         )}

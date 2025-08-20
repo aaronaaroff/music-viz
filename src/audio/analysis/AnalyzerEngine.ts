@@ -17,11 +17,11 @@ export class AnalyzerEngine {
     }
 
     // Get current data
-    analyzerNode.getByteFrequencyData(this.frequencyData);
-    analyzerNode.getByteTimeDomainData(this.timeData);
+    analyzerNode.getByteFrequencyData(this.frequencyData!);
+    analyzerNode.getByteTimeDomainData(this.timeData!);
 
     // Calculate volume (RMS)
-    const volume = this.calculateVolume(this.timeData);
+    const volume = this.calculateVolume(this.timeData!);
     
     // Update volume history
     this.volumeHistory.push(volume);
@@ -42,8 +42,8 @@ export class AnalyzerEngine {
     this.previousVolume = volume;
 
     return {
-      frequencyData: new Uint8Array(this.frequencyData),
-      timeData: new Uint8Array(this.timeData),
+      frequencyData: new Uint8Array(this.frequencyData!),
+      timeData: new Uint8Array(this.timeData!),
       volume,
       beat,
       onset,

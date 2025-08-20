@@ -21,7 +21,7 @@ export function useUserPreferences() {
         const { data, error } = await getUserPreferences(user.id);
         
         if (error) {
-          setError(error.message || 'Failed to load preferences');
+          setError((error as any)?.message || 'Failed to load preferences');
           setPreferences(null);
         } else {
           setPreferences(data);

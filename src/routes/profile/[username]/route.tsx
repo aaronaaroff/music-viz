@@ -130,7 +130,7 @@ function PublicProfilePage() {
       const { isFollowing: newFollowingStatus, error } = await toggleFollow(profileUser.id);
       
       if (!error) {
-        setIsFollowing(newFollowingStatus);
+        setIsFollowing(newFollowingStatus ?? false);
       }
     } catch (error) {
       console.error('Error toggling follow:', error);

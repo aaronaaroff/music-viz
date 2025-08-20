@@ -233,6 +233,16 @@ function MusicVizUpload() {
               setCurrentVisualizationId(null);
               setVisualizationName(visualization.title + " (View Only)");
               
+              // Apply visualization settings for view-only mode too
+              if (updateSettings) {
+                updateSettings(visualization.settings);
+              }
+              
+              // Apply tags and other settings for view-only mode
+              if (visualization.tags && Array.isArray(visualization.tags)) {
+                setSelectedTags(visualization.tags);
+              }
+              
               // Don't save to session for view-only mode
               clearSession();
             }
@@ -273,8 +283,8 @@ function MusicVizUpload() {
           console.error('Error loading visualization:', error);
           setSaveStatus({ type: 'error', message: 'Failed to load visualization' });
         }
-      } else if (shouldCreateNew) {
-        // Create new project - inline logic to avoid dependency issues
+      } else if (shouldCreateNew && !loadVisualizationId) {
+        // Create new project ONLY if not loading an existing one
         clearSession();
         setCurrentVisualizationId(null);
         setUploadedFileName("");
@@ -287,9 +297,8 @@ function MusicVizUpload() {
         setIsCurrentVizPublic(preferences?.default_viz_privacy === 'public' || false);
         
         // Stop any current audio
-        if (state.source) {
+        if (state.currentSource) {
           stopAnalysis();
-          setSource(null);
         }
         
         // Generate unique name for new project
@@ -310,28 +319,13 @@ function MusicVizUpload() {
           updateSettings({
             type: (preferences?.default_visualization_type as VisualizationType) || VisualizationType.CIRCLE,
             colorTheme: (preferences?.default_color_theme as ColorTheme) || ColorTheme.NEON,
-            intensity: preferences?.default_sensitivity || 0.5,
-            speed: 0.5,
-            scale: 0.5,
-            blur: 0,
-            brightness: 1,
-            contrast: 1,
-            saturation: 1,
-            particleCount: 100,
-            particleSize: 2,
-            particleSpeed: 0.5,
-            trailLength: 0.3,
-            enableBeatDetection: true,
-            beatSensitivity: 0.5,
-            enableOnsetAnalysis: true,
-            onsetSensitivity: preferences?.default_smoothing || 0.5,
-            // Add other settings from preferences
-            sensitivity: preferences?.default_sensitivity || 0.5,
-            smoothing: preferences?.default_smoothing || 0.3,
-            sizeScale: 0.5,
-            glowIntensity: 0.3,
-            backgroundOpacity: 0.1,
-            rotationSpeed: 0,
+            sensitivity: preferences?.default_sensitivity || 0.7,
+            smoothing: preferences?.default_smoothing || 0.8,
+            sizeScale: 0.8,
+            particleCount: 64,
+            glowIntensity: 0.6,
+            backgroundOpacity: 0.05,
+            rotationSpeed: 0.2,
             pulseBeatSync: true,
             flashOnset: true
           });
@@ -364,18 +358,20 @@ function MusicVizUpload() {
               // Restore audio file from Supabase Storage
               const restoreAudioFromSession = async () => {
                 try {
-                  const audioFile = await loadAudioFileFromUrl(
-                    savedSession.audioSource.audioFileUrl,
-                    savedSession.audioSource.fileName
-                  );
+                  if (savedSession.audioSource?.audioFileUrl) {
+                    const audioFile = await loadAudioFileFromUrl(
+                      savedSession.audioSource.audioFileUrl,
+                      savedSession.audioSource.fileName || 'audio.mp3'
+                    );
                   
-                  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-                  const fileSource = new FileSource(audioContext);
-                  await fileSource.loadFile(audioFile);
-                  await setSource(fileSource, AudioSourceType.FILE);
-                  setCurrentSourceType(AudioSourceType.FILE);
-                  setDuration(fileSource.getDuration());
-                  setCurrentTime(0);
+                    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                    const fileSource = new FileSource(audioContext);
+                    await fileSource.loadFile(audioFile);
+                    await setSource(fileSource, AudioSourceType.FILE);
+                    setCurrentSourceType(AudioSourceType.FILE);
+                    setDuration(fileSource.getDuration());
+                    setCurrentTime(0);
+                  }
                 } catch (audioError) {
                   console.warn('Failed to restore audio from session:', audioError);
                 }
@@ -712,7 +708,7 @@ function MusicVizUpload() {
           const uploadResult = await uploadAudioFile({
             file: currentAudioFile,
             userId: user.id,
-            visualizationId: currentVisualizationId
+            visualizationId: currentVisualizationId ?? undefined
           });
           
           audioFileUrl = uploadResult.url;
@@ -732,7 +728,7 @@ function MusicVizUpload() {
           audioSource: currentSourceType,
           audioFileName: uploadedFileName || null,
         },
-        audio_file_name: uploadedFileName || undefined,
+        audio_file_name: uploadedFileName ?? undefined,
         audio_file_url: audioFileUrl || undefined,
         is_public: isCurrentVizPublic,
         tags: selectedTags.length > 0 ? selectedTags : undefined,

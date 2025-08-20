@@ -384,7 +384,7 @@ function SettingsPage() {
                       </div>
                       <ToggleGroup 
                         value={vizDefaults.defaultPrivacy}
-                        onValueChange={(value) => setVizDefaults(prev => ({ ...prev, defaultPrivacy: value }))}
+                        onValueChange={(value) => setVizDefaults(prev => ({ ...prev, defaultPrivacy: value as 'private' | 'public' }))}
                       >
                         <ToggleGroup.Item value="private">Private</ToggleGroup.Item>
                         <ToggleGroup.Item value="public">Public</ToggleGroup.Item>
@@ -404,7 +404,7 @@ function SettingsPage() {
                         Change Password
                       </Button>
                       <Button 
-                        variant="error-secondary"
+                        variant="destructive-secondary"
                         onClick={() => setShowDeleteDialog(true)}
                       >
                         Delete Account
@@ -506,7 +506,7 @@ function SettingsPage() {
                             Cancel
                           </Button>
                           <Button
-                            variant="error-primary"
+                            variant="destructive-primary"
                             onClick={handleDeleteAccount}
                             loading={isSaving}
                           >

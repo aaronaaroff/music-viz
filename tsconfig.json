@@ -10,6 +10,9 @@
   ],
   "compilerOptions": {
     "paths": {
+      "@/*": [
+        "./src/*"
+      ],
       "@/ui/*": [
         "./src/ui/*"
       ]

@@ -524,6 +524,7 @@ vercel env add VITE_SUPABASE_ANON_KEY
 - Performance optimizations for complex visualizations
 - "Request A Song" functionality for collaborative music selection
 - **Open Graph Image Creation**: Design 1200x630px social sharing image for improved link previews
+- **Code Cleanup**: Remove unused imports and variables (React imports, unused destructured data, etc.)
 
 ---
 

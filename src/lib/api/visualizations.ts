@@ -93,8 +93,8 @@ export async function getSavedVisualizations(userId: string) {
     .order('created_at', { ascending: false });
 
   return {
-    data: data?.map(save => ({
-      ...save.visualizations,
+    data: data?.filter(save => save.visualizations).map(save => ({
+      ...save.visualizations!,
       saved_at: save.created_at
     })) || [],
     error
