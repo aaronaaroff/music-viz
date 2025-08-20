@@ -141,7 +141,6 @@ function MusicVizUpload() {
       
       if (loadVisualizationId) {
         try {
-          console.log('Loading visualization from URL:', loadVisualizationId);
           
           // Fetch the visualization from database
           let visualization = null;
@@ -187,7 +186,6 @@ function MusicVizUpload() {
             console.error('Error loading visualization:', error);
             setSaveStatus({ type: 'error', message: 'Failed to load visualization' });
           } else if (visualization) {
-            console.log('Loaded visualization:', visualization);
             
             // Clear any existing session first
             clearSession();
@@ -340,7 +338,6 @@ function MusicVizUpload() {
         // No URL parameter, try to load saved session
         const savedSession = loadSession();
         if (savedSession) {
-          console.log('Restoring saved session:', savedSession);
           
           // Restore visualization state
           if (savedSession.visualizationId) {
@@ -412,7 +409,6 @@ function MusicVizUpload() {
   useEffect(() => {
     const savedSession = loadSession();
     if (savedSession?.settings && updateSettings) {
-      console.log('Restoring settings from session:', savedSession.settings);
       updateSettings(savedSession.settings);
     }
   }, [updateSettings, loadSession, currentVisualizationId]);

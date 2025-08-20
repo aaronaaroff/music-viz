@@ -27,7 +27,6 @@ async function ensureValidSession(options: RetryOptions = {}): Promise<boolean> 
       
       if (session?.user) {
         // Session is valid
-        console.log(`Session validated on attempt ${attempt}`);
         return true;
       } else {
         console.warn(`No valid session on attempt ${attempt}`);
@@ -69,7 +68,6 @@ export async function robustCreateVisualization(
   // Attempt the operation with retry logic
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`Create visualization attempt ${attempt}`);
       
       const result = await createVisualization(data);
       
@@ -100,7 +98,6 @@ export async function robustCreateVisualization(
       }
       
       // Success!
-      console.log(`Create visualization succeeded on attempt ${attempt}`);
       return result;
       
     } catch (error: any) {
@@ -144,7 +141,6 @@ export async function robustUpdateVisualization(
   // Attempt the operation with retry logic
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`Update visualization attempt ${attempt}`);
       
       const result = await updateVisualization(id, updates);
       
@@ -175,7 +171,6 @@ export async function robustUpdateVisualization(
       }
       
       // Success!
-      console.log(`Update visualization succeeded on attempt ${attempt}`);
       return result;
       
     } catch (error: any) {

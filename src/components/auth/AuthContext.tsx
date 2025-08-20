@@ -44,7 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         if (error.code === 'PGRST116') {
           // Profile doesn't exist, try to create it
-          console.log('Profile not found, creating...');
           const { data: userData } = await supabase.auth.getUser();
           
           if (userData?.user) {
@@ -126,7 +125,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (_event, newSession) => {
         if (!mounted || !isInitialized) return;
 
-        console.log('Auth state change:', _event);
 
         // Update session and user
         setSession(newSession);
@@ -154,7 +152,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleVisibilityChange = async () => {
       // Only refresh if it's been more than 30 seconds AND we currently have a user
       if (!document.hidden && user && Date.now() - lastRefresh > 30000) {
-        console.log('Tab became visible after 30+ seconds, validating auth state...');
         
         try {
           // Just validate the session without disrupting the current state
@@ -163,10 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (currentSession?.user && currentSession.user.id === user.id) {
             // Session is still valid for the same user, just update timestamp
             setLastRefresh(Date.now());
-            console.log('Session validated, no changes needed');
           } else if (!currentSession?.user && user) {
             // Session expired, need to clear state
-            console.log('Session expired, clearing auth state');
             setSession(null);
             setUser(null);
             setProfile(null);
@@ -182,7 +177,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data: { session: currentSession } } = await supabase.auth.getSession();
           if (!currentSession?.user && user) {
             // Session expired, clear state immediately
-            console.log('Quick session check: session expired, clearing auth state');
             setSession(null);
             setUser(null);
             setProfile(null);
@@ -197,7 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Handle cross-tab auth state synchronization
     const handleStorageChange = async (e: StorageEvent) => {
       if (e.key === 'music-viz-supabase-auth' && e.newValue) {
-        console.log('Auth state changed in another tab');
         
         // Give Supabase a moment to sync
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -219,11 +212,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Handle network reconnection - check auth state when online again
     const handleOnline = async () => {
       if (user) {
-        console.log('Network reconnected, validating auth state...');
         try {
           const { data: { session: currentSession } } = await supabase.auth.getSession();
           if (!currentSession?.user && user) {
-            console.log('Network reconnection: session expired, clearing auth state');
             setSession(null);
             setUser(null);
             setProfile(null);

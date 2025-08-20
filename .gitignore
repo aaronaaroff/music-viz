@@ -27,4 +27,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Development/reference files (keep local only)
+refs/
+src/test-auth.ts
 remixed-379c977a.tsx
+
+# Supabase temp files
+supabase/.temp/
