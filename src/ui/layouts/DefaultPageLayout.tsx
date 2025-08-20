@@ -24,7 +24,8 @@ import { FeatherLogOut } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { useAuth } from "../../components/auth/AuthContext";
 import { AuthModal } from "../../components/auth/AuthModal";
-import { Button } from "../components/Button";
+import VuzikLogo from "../../components/VuzikLogo";
+import VuzikLogoAnimated from "../../components/VuzikLogoAnimated";
 
 interface DefaultPageLayoutRootProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -42,6 +43,7 @@ const DefaultPageLayoutRoot = React.forwardRef((
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
   
   // Reset dropdown when auth state changes
   React.useEffect(() => {
@@ -65,13 +67,20 @@ const DefaultPageLayoutRoot = React.forwardRef((
       ref={ref as any}
       {...otherProps}
     >
-      <SidebarCollapsible
-        header={
-          <img
-            className="h-6 flex-none object-cover"
-            src="https://res.cloudinary.com/subframe/image/upload/v1711417507/shared/y2rsnhq3mex4auk54aye.png"
-          />
-        }
+      <div
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
+      >
+        <SidebarCollapsible
+          header={
+            <div className="flex items-center justify-center w-full">
+              {sidebarHovered || dropdownOpen ? (
+                <VuzikLogoAnimated size={24} />
+              ) : (
+                <VuzikLogo size={24} />
+              )}
+            </div>
+          }
         footer={
           React.createElement(({ onDropdownOpenChange }: { onDropdownOpenChange?: (open: boolean) => void }) => (
             <SubframeCore.DropdownMenu.Root
@@ -198,6 +207,7 @@ const DefaultPageLayoutRoot = React.forwardRef((
           Robot Analysis
         </SidebarCollapsible.NavItem>
       </SidebarCollapsible>
+      </div>
       {children ? (
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 self-stretch overflow-y-auto bg-default-background">
           {children}

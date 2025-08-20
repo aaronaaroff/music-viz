@@ -20,10 +20,14 @@ import {
   type UserPreferences 
 } from "@/lib/api/userPreferences";
 import { supabase } from "@/lib/supabase";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 
 function SettingsPage() {
   const { user, profile, loading, updateProfile } = useAuth();
   const navigate = useNavigate();
+  
+  // Set document title
+  useDocumentTitle(getPageTitle('Settings'));
   
   const [activeTab, setActiveTab] = useState<string>("profile");
   const [isSaving, setIsSaving] = useState(false);

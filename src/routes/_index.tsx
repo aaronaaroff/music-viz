@@ -44,6 +44,7 @@ import { supabase } from "@/lib/supabase";
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 
 function MusicVizUpload() {
   const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
@@ -88,6 +89,12 @@ function MusicVizUpload() {
   const { preferences } = useUserPreferences();
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // Update document title based on visualization name
+  const documentTitle = visualizationName 
+    ? getPageTitle(visualizationName)
+    : getPageTitle('Create');
+  useDocumentTitle(documentTitle);
   
   // Visualization system
   const {

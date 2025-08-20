@@ -33,6 +33,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { getSavedVisualizations, toggleSave } from "@/lib/api/visualizations";
 import { getUserFolders, getFolderContents, createFolder as createFolderAPI, updateFolder as updateFolderAPI, deleteFolder as deleteFolderAPI, addVisualizationToFolder, removeVisualizationFromFolder } from "@/lib/api/folders";
 import { useNavigate } from "react-router-dom";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 import type { Database } from "@/lib/database.types";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
@@ -53,6 +54,9 @@ interface Folder {
 function SavedPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Set document title
+  useDocumentTitle(getPageTitle('Saved'));
   
   // State
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);

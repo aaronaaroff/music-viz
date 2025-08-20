@@ -20,6 +20,7 @@ import type { Database } from "@/lib/database.types";
 import { VisualizationCard } from "@/components/VisualizationCard";
 import { supabase } from "@/lib/supabase";
 import { getUserPreferences } from "@/lib/api/userPreferences";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
   profiles?: { username: string | null; full_name: string | null; avatar_url: string | null; banner_url?: string | null } | null;
@@ -32,12 +33,16 @@ type PublicProfile = {
   bio: string | null;
   avatar_url: string | null;
   banner_url: string | null;
+  is_public?: boolean;
 };
 
 function PublicProfilePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { username } = useParams();
+  
+  // Set document title early (hooks must be called in same order every render)
+  useDocumentTitle(getPageTitle('Profile', username ? `@${username}` : 'User'));
   
   const [profileUser, setProfileUser] = useState<PublicProfile | null>(null);
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -62,23 +67,29 @@ function PublicProfilePage() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, username, full_name, bio, avatar_url, banner_url')
+          .select('id, username, full_name, bio, avatar_url, banner_url, is_public')
           .eq('username', username)
           .single();
 
         if (error || !data) {
           setNotFound(true);
         } else {
-          // Check user's privacy preferences
-          const { data: preferences } = await getUserPreferences(data.id);
-          setUserPreferences(preferences);
+          // Check profile privacy using the is_public field
+          if (!data.is_public && (!user || user.id !== data.id)) {
+            // Profile is private and user is not the owner
+            setIsPrivateProfile(true);
+            setLoading(false);
+            return;
+          }
           
-          if (preferences && !preferences.profile_is_public) {
-            // Profile is private, only show to owner
-            if (!user || user.id !== data.id) {
-              setIsPrivateProfile(true);
-              setLoading(false);
-              return;
+          // Only fetch user preferences if viewing own profile
+          if (user && user.id === data.id) {
+            try {
+              const { data: preferences } = await getUserPreferences(data.id);
+              setUserPreferences(preferences);
+            } catch (error) {
+              // Ignore error if can't fetch preferences
+              setUserPreferences(null);
             }
           }
           

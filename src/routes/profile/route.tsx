@@ -18,6 +18,7 @@ import { FeatherEdit3 } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getUserVisualizations, deleteVisualization } from "@/lib/api/visualizations";
 import { useNavigate } from "react-router-dom";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 import type { Database } from "@/lib/database.types";
 import { VisualizationCard } from "@/components/VisualizationCard";
 import { uploadImage } from "@/lib/api/imageFiles";
@@ -29,6 +30,10 @@ type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
 function UserProfileHub() {
   const { user, profile, loading, updateProfile } = useAuth();
   const navigate = useNavigate();
+  
+  // Set document title based on user profile
+  const profileTitle = profile?.full_name || profile?.username || 'Profile';
+  useDocumentTitle(getPageTitle('Profile', profileTitle));
   
   const [activeTab, setActiveTab] = useState<string>("collection");
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);

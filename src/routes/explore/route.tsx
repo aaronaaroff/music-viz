@@ -26,6 +26,7 @@ import { getPublicVisualizations, toggleLike, toggleSave, createComment, getVisu
 import { useNavigate } from "react-router-dom";
 import { FolderSelectionPopover } from "@/components/FolderSelectionPopover";
 import { getTrendingCreators, toggleFollow, checkIsFollowing, getFollowing } from "@/lib/api/follows";
+import { useDocumentTitle, getPageTitle } from "@/hooks/useDocumentTitle";
 import type { Database } from "@/lib/database.types";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
@@ -47,6 +48,9 @@ type Comment = Database['public']['Tables']['comments']['Row'] & {
 function ExplorePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Set document title
+  useDocumentTitle(getPageTitle('Explore'));
   
   // State
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
