@@ -12,6 +12,14 @@ import { FeatherSettings } from "@subframe/core";
 import { FeatherDownload } from "@subframe/core";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { 
+  getUserPreferences, 
+  updateUserPreferences, 
+  changePassword,
+  deleteAccount,
+  type UserPreferences 
+} from "@/lib/api/userPreferences";
+import { supabase } from "@/lib/supabase";
 
 function SettingsPage() {
   const { user, profile, loading, updateProfile } = useAuth();
@@ -20,6 +28,17 @@ function SettingsPage() {
   const [activeTab, setActiveTab] = useState<string>("profile");
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: "" });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
+  
+  // Password change state
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  // Delete account state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
   
   // Profile settings
   const [profileSettings, setProfileSettings] = useState({
@@ -30,11 +49,42 @@ function SettingsPage() {
   
   // Visualization defaults
   const [vizDefaults, setVizDefaults] = useState({
-    defaultPrivacy: "private",
+    defaultPrivacy: "private" as 'private' | 'public',
     defaultSensitivity: 0.5,
     defaultSmoothing: 0.3,
     defaultColorTheme: "neon"
   });
+
+  // Load user preferences
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (!user) return;
+      
+      setIsLoadingPrefs(true);
+      const { data, error } = await getUserPreferences(user.id);
+      
+      if (data && !error) {
+        setProfileSettings({
+          isPublic: data.profile_is_public,
+          showEmail: data.show_email,
+          showFullName: data.show_full_name
+        });
+        
+        setVizDefaults({
+          defaultPrivacy: data.default_viz_privacy,
+          defaultSensitivity: data.default_sensitivity,
+          defaultSmoothing: data.default_smoothing,
+          defaultColorTheme: data.default_color_theme
+        });
+      }
+      
+      setIsLoadingPrefs(false);
+    };
+    
+    if (user) {
+      loadPreferences();
+    }
+  }, [user]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -50,9 +100,21 @@ function SettingsPage() {
     setSaveStatus({ type: null, message: "" });
     
     try {
-      // Here you would typically save to a user_preferences table
-      // For now, we'll just simulate a save
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const updates: Partial<UserPreferences> = {
+        profile_is_public: profileSettings.isPublic,
+        show_email: profileSettings.showEmail,
+        show_full_name: profileSettings.showFullName,
+        default_viz_privacy: vizDefaults.defaultPrivacy,
+        default_sensitivity: vizDefaults.defaultSensitivity,
+        default_smoothing: vizDefaults.defaultSmoothing,
+        default_color_theme: vizDefaults.defaultColorTheme
+      };
+      
+      const { error } = await updateUserPreferences(user.id, updates);
+      
+      if (error) {
+        throw error;
+      }
       
       setSaveStatus({ type: 'success', message: 'Settings saved successfully!' });
       setTimeout(() => setSaveStatus({ type: null, message: "" }), 3000);
@@ -65,25 +127,88 @@ function SettingsPage() {
       setIsSaving(false);
     }
   };
-
-  const handleExportData = () => {
-    // Placeholder for data export functionality
-    const exportData = {
-      profile: profile,
-      settings: {
-        profile: profileSettings,
-        visualization: vizDefaults
-      },
-      exportDate: new Date().toISOString()
-    };
+  
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      setSaveStatus({ type: 'error', message: 'Passwords do not match' });
+      return;
+    }
     
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `music-viz-data-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (newPassword.length < 6) {
+      setSaveStatus({ type: 'error', message: 'Password must be at least 6 characters' });
+      return;
+    }
+    
+    setIsSaving(true);
+    const { success, error } = await changePassword(currentPassword, newPassword);
+    
+    if (success) {
+      setSaveStatus({ type: 'success', message: 'Password changed successfully!' });
+      setShowPasswordDialog(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } else {
+      setSaveStatus({ type: 'error', message: error || 'Failed to change password' });
+    }
+    
+    setIsSaving(false);
+    setTimeout(() => setSaveStatus({ type: null, message: "" }), 3000);
+  };
+  
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      return;
+    }
+    
+    setIsSaving(true);
+    const { success, error } = await deleteAccount(deletePassword);
+    
+    if (success) {
+      navigate('/');
+    } else {
+      setSaveStatus({ type: 'error', message: error || 'Failed to delete account' });
+      setIsSaving(false);
+    }
+    
+    setShowDeleteDialog(false);
+    setDeletePassword("");
+  };
+
+  const handleExportData = async () => {
+    if (!user) return;
+    
+    try {
+      // Fetch all user data
+      const [vizResult, prefsResult] = await Promise.all([
+        supabase.from('visualizations').select('*').eq('user_id', user.id),
+        getUserPreferences(user.id)
+      ]);
+      
+      const exportData = {
+        profile: profile,
+        preferences: prefsResult.data,
+        visualizations: vizResult.data || [],
+        settings: {
+          profile: profileSettings,
+          visualization: vizDefaults
+        },
+        exportDate: new Date().toISOString()
+      };
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `music-viz-data-${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      setSaveStatus({ type: 'success', message: 'Data exported successfully!' });
+      setTimeout(() => setSaveStatus({ type: null, message: "" }), 3000);
+    } catch (error) {
+      setSaveStatus({ type: 'error', message: 'Failed to export data' });
+    }
   };
 
   if (loading) {
@@ -268,14 +393,125 @@ function SettingsPage() {
                       Account Actions
                     </span>
                     <div className="flex gap-3">
-                      <Button variant="neutral-secondary">
+                      <Button 
+                        variant="neutral-secondary"
+                        onClick={() => setShowPasswordDialog(true)}
+                      >
                         Change Password
                       </Button>
-                      <Button variant="error-secondary">
+                      <Button 
+                        variant="error-secondary"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
                         Delete Account
                       </Button>
                     </div>
                   </div>
+                  
+                  {/* Password Change Dialog */}
+                  {showPasswordDialog && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                      <div className="bg-default-background p-6 rounded-lg max-w-md w-full mx-4">
+                        <h3 className="text-heading-3 font-heading-3 mb-4">Change Password</h3>
+                        <div className="flex flex-col gap-4">
+                          <TextField
+                            label="Current Password"
+                            helpText=""
+                          >
+                            <TextField.Input
+                              type="password"
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              placeholder="Enter current password"
+                            />
+                          </TextField>
+                          <TextField
+                            label="New Password"
+                            helpText="Must be at least 6 characters"
+                          >
+                            <TextField.Input
+                              type="password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Enter new password"
+                            />
+                          </TextField>
+                          <TextField
+                            label="Confirm New Password"
+                            helpText=""
+                          >
+                            <TextField.Input
+                              type="password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              placeholder="Confirm new password"
+                            />
+                          </TextField>
+                          <div className="flex gap-3 justify-end mt-4">
+                            <Button
+                              variant="neutral-secondary"
+                              onClick={() => {
+                                setShowPasswordDialog(false);
+                                setCurrentPassword("");
+                                setNewPassword("");
+                                setConfirmPassword("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="brand-primary"
+                              onClick={handleChangePassword}
+                              loading={isSaving}
+                            >
+                              Change Password
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Delete Account Dialog */}
+                  {showDeleteDialog && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                      <div className="bg-default-background p-6 rounded-lg max-w-md w-full mx-4">
+                        <h3 className="text-heading-3 font-heading-3 mb-4 text-error-700">Delete Account</h3>
+                        <p className="text-body font-body text-subtext-color mb-4">
+                          This action cannot be undone. All your data will be permanently deleted.
+                        </p>
+                        <TextField
+                          label="Enter your password to confirm"
+                          helpText=""
+                        >
+                          <TextField.Input
+                            type="password"
+                            value={deletePassword}
+                            onChange={(e) => setDeletePassword(e.target.value)}
+                            placeholder="Enter password"
+                          />
+                        </TextField>
+                        <div className="flex gap-3 justify-end mt-6">
+                          <Button
+                            variant="neutral-secondary"
+                            onClick={() => {
+                              setShowDeleteDialog(false);
+                              setDeletePassword("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="error-primary"
+                            onClick={handleDeleteAccount}
+                            loading={isSaving}
+                          >
+                            Delete Account
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               

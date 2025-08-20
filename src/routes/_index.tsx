@@ -43,6 +43,7 @@ import { uploadAudioFile, loadAudioFileFromUrl } from "@/lib/api/audioFiles";
 import { supabase } from "@/lib/supabase";
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 function MusicVizUpload() {
   const [currentSourceType, setCurrentSourceType] = useState<AudioSourceType>(AudioSourceType.FILE);
@@ -84,6 +85,7 @@ function MusicVizUpload() {
   
   const { user } = useAuth();
   const { saveSession, loadSession, clearSession } = useSessionPersistence();
+  const { preferences } = useUserPreferences();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -276,7 +278,8 @@ function MusicVizUpload() {
         setUploadFeedback({ type: null, message: "" });
         setSaveStatus({ type: null, message: "" });
         setCurrentSourceType(AudioSourceType.FILE);
-        setIsCurrentVizPublic(false);
+        // Use user preference for default privacy, fallback to false
+        setIsCurrentVizPublic(preferences?.default_viz_privacy === 'public' || false);
         
         // Stop any current audio
         if (state.source) {
@@ -297,12 +300,12 @@ function MusicVizUpload() {
           setVisualizationName("Visualization 1");
         }
         
-        // Reset visualization settings if available
+        // Reset visualization settings using user preferences or defaults
         if (updateSettings) {
           updateSettings({
-            type: VisualizationType.CIRCLE,
-            colorTheme: ColorTheme.NEON,
-            intensity: 0.5,
+            type: (preferences?.default_visualization_type as VisualizationType) || VisualizationType.CIRCLE,
+            colorTheme: (preferences?.default_color_theme as ColorTheme) || ColorTheme.NEON,
+            intensity: preferences?.default_sensitivity || 0.5,
             speed: 0.5,
             scale: 0.5,
             blur: 0,
@@ -316,7 +319,16 @@ function MusicVizUpload() {
             enableBeatDetection: true,
             beatSensitivity: 0.5,
             enableOnsetAnalysis: true,
-            onsetSensitivity: 0.5
+            onsetSensitivity: preferences?.default_smoothing || 0.5,
+            // Add other settings from preferences
+            sensitivity: preferences?.default_sensitivity || 0.5,
+            smoothing: preferences?.default_smoothing || 0.3,
+            sizeScale: 0.5,
+            glowIntensity: 0.3,
+            backgroundOpacity: 0.1,
+            rotationSpeed: 0,
+            pulseBeatSync: true,
+            flashOnset: true
           });
         }
         
@@ -453,12 +465,10 @@ function MusicVizUpload() {
       stopAnalysis();
     }
 
-    // Reset file upload state when switching away from file source
+    // Don't reset file upload state - preserve it for when user switches back
     if (sourceType !== AudioSourceType.FILE) {
-      setUploadedFileName("");
+      // Only clear feedback, not the file name
       setUploadFeedback({ type: null, message: "" });
-      setCurrentTime(0);
-      setDuration(0);
       stopTimeTracking();
     }
 
@@ -471,7 +481,26 @@ function MusicVizUpload() {
     try {
       switch (sourceType) {
         case AudioSourceType.FILE:
-          // File source will be set when user uploads a file
+          // If we have a saved audio file URL, restore it
+          if (currentAudioFileUrl && uploadedFileName) {
+            try {
+              const audioFile = await loadAudioFileFromUrl(currentAudioFileUrl, uploadedFileName);
+              const fileSource = new FileSource(audioContext);
+              await fileSource.loadFile(audioFile);
+              await setSource(fileSource, AudioSourceType.FILE);
+              setDuration(fileSource.getDuration());
+              setCurrentTime(0);
+              setUploadFeedback({ 
+                type: 'success', 
+                message: `Restored ${uploadedFileName}` 
+              });
+            } catch (error) {
+              console.warn('Failed to restore audio file:', error);
+              // If restoration fails, clear the file state
+              setUploadedFileName("");
+              setCurrentAudioFileUrl("");
+            }
+          }
           break;
           
         case AudioSourceType.MICROPHONE:

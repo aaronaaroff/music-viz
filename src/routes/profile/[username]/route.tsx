@@ -19,6 +19,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { Database } from "@/lib/database.types";
 import { VisualizationCard } from "@/components/VisualizationCard";
 import { supabase } from "@/lib/supabase";
+import { getUserPreferences } from "@/lib/api/userPreferences";
 
 type Visualization = Database['public']['Tables']['visualizations']['Row'] & {
   profiles?: { username: string | null; full_name: string | null; avatar_url: string | null; banner_url?: string | null } | null;
@@ -47,6 +48,8 @@ function PublicProfilePage() {
   const [sortBy, setSortBy] = useState<"updated_at" | "created_at" | "title">("updated_at");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [notFound, setNotFound] = useState(false);
+  const [isPrivateProfile, setIsPrivateProfile] = useState(false);
+  const [userPreferences, setUserPreferences] = useState<any>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
@@ -66,6 +69,19 @@ function PublicProfilePage() {
         if (error || !data) {
           setNotFound(true);
         } else {
+          // Check user's privacy preferences
+          const { data: preferences } = await getUserPreferences(data.id);
+          setUserPreferences(preferences);
+          
+          if (preferences && !preferences.profile_is_public) {
+            // Profile is private, only show to owner
+            if (!user || user.id !== data.id) {
+              setIsPrivateProfile(true);
+              setLoading(false);
+              return;
+            }
+          }
+          
           setProfileUser(data);
           // Check if current user is following this profile
           if (user && user.id !== data.id) {
@@ -180,6 +196,24 @@ function PublicProfilePage() {
     );
   }
 
+  if (isPrivateProfile) {
+    return (
+      <DefaultPageLayout>
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <span className="text-heading-2 font-heading-2 text-default-font">Private Profile</span>
+            <span className="text-body font-body text-subtext-color">
+              @{username} has set their profile to private.
+            </span>
+            <Button onClick={() => navigate('/explore')}>
+              Back to Explore
+            </Button>
+          </div>
+        </div>
+      </DefaultPageLayout>
+    );
+  }
+
   if (notFound || !profileUser) {
     return (
       <DefaultPageLayout>
@@ -198,7 +232,11 @@ function PublicProfilePage() {
     );
   }
 
-  const displayName = profileUser.full_name || profileUser.username || 'User';
+  // Respect privacy settings for display name
+  const shouldShowFullName = userPreferences?.show_full_name ?? true;
+  const displayName = (shouldShowFullName && profileUser.full_name) 
+    ? profileUser.full_name 
+    : profileUser.username || 'User';
 
   return (
     <DefaultPageLayout>

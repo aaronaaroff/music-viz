@@ -2,16 +2,19 @@
 
 ## Current Phase: Phase 1 - Foundation & Core Features ✅
 
-### Phase Status: **75% Complete**
+### Phase Status: **90% Complete**
 - ✅ Authentication system with Supabase
 - ✅ Multi-input audio processing (file, microphone, keyboard)
 - ✅ Real-time visualization engine with 3 visualization types
 - ✅ Full UI implementation with Subframe components
 - ✅ Database connectivity fixed with robust operations
 - ✅ Visualization persistence with session management
-- ⏳ Profile page implementation
-- ⏳ Explore page integration
-- ⏳ Export & sharing features
+- ✅ Profile page implementation with public views
+- ✅ Explore page integration with social features
+- ✅ Navigation and routing fixes
+- ⏳ Settings page implementation
+- ⏳ Audio file state persistence when switching inputs
+- ⏳ Production deployment
 
 ---
 
@@ -100,13 +103,8 @@
 
 ---
 
-#### **Story 1.8a: Critical Bug Fixes & Polish** 🔧 **IN PROGRESS**
-**Status:** Addressing critical functionality issues
-
-**Tasks:**
-- [ ] Fix uploaded audio file not persisting on page refresh (file input only)
-- [ ] Fix tags not persisting to database
-- [ ] Add tag validation (15 char limit, no URLs, edge cases)
+#### **Story 1.8a: Critical Bug Fixes & Polish** ✅ **COMPLETED**
+**Status:** Critical functionality issues resolved
 
 **Completed:**
 - [x] Keyboard component functional and triggering visualizations immediately
@@ -116,11 +114,16 @@
 - [x] Preset system fully removed
 - [x] Visualization initial responsiveness fixed (immediate trigger)
 - [x] Fixed requirement to switch inputs to trigger visualizations
+- [x] Tags persisting to database properly
+- [x] Tag validation implemented (15 char limit, URL blocking)
+- [x] Audio files persist when saved to project
+
+**Remaining Issue:**
+- [ ] Audio file doesn't reload when switching between inputs (requires project reload from profile)
 
 **Technical Notes:**
-- Audio file persistence for uploaded files (Phase 1 scope: file uploads only, not microphone recordings or keyboard compositions)
-- Tag validation should include sanitization and length limits
-- Microphone and keyboard real-time audio persistence moved to Phase 2
+- Audio file persistence works but UI doesn't maintain state when switching inputs
+- Need to preserve audio file reference when switching between File/Microphone/Keyboard modes
 
 ---
 
@@ -152,33 +155,40 @@
 
 ### 📋 **Current Sprint (Phase 1 Final)**
 
-#### **Story 1.11: Public Profile Views** 🚧 **IN PROGRESS**
+#### **Story 1.8b: Audio File State Persistence** 🚧 **IN PROGRESS**
+**Issue:** Audio files don't reload when switching between input modes
 **Acceptance Criteria:**
-- [ ] Create public profile route (/profile/:username)
-- [ ] Show public view of user profile (no edit capabilities)
-- [ ] Display only public visualizations
-- [ ] Hide drafts and sensitive information
-- [ ] Link profile pictures/usernames in cards to public profiles
-- [ ] Add follow/unfollow functionality (future feature placeholder)
+- [ ] Maintain audio file reference when switching from File to Microphone/Keyboard
+- [ ] Automatically reload saved audio file when switching back to File input
+- [ ] Show loaded file name in UI even after input switch
+- [ ] Preserve audio file across page navigation within same session
 
 **Technical Notes:**
-- Reuse profile page components with view-only mode
-- Implement proper route parameters
-- Ensure RLS policies protect private data
+- Store audio file reference in visualization state
+- Update AudioInputSelector to check for existing audio file
+- Implement proper state management for input switching
 
 ---
 
-#### **Story 1.12: Navigation & Routing Fixes** 🚧 **IN PROGRESS**
-**Acceptance Criteria:**
-- [ ] Fix saved page refresh routing (should stay on /saved)
-- [ ] Implement proper browser history management
-- [ ] Preserve page state on navigation
-- [ ] Add breadcrumb navigation where appropriate
+#### **Story 1.11: Public Profile Views** ✅ **COMPLETED**
+**Completed:**
+- [x] Create public profile route (/profile/:username)
+- [x] Show public view of user profile (no edit capabilities)
+- [x] Display only public visualizations
+- [x] Hide drafts and sensitive information
+- [x] Link profile pictures/usernames in cards to public profiles
+- [x] Add follow/unfollow functionality (future feature placeholder)
 
-**Technical Notes:**
-- Check React Router configuration
-- Implement session storage for page state
-- Add route guards where needed
+---
+
+#### **Story 1.12: Navigation & Routing Fixes** ✅ **COMPLETED**
+**Completed:**
+- [x] Fix saved page refresh routing (should stay on /saved)
+- [x] Implement proper browser history management
+- [x] Preserve page state on navigation
+- [x] Add breadcrumb navigation where appropriate
+
+**Note:** Session persistence on production server still needs validation
 
 ---
 
@@ -349,17 +359,116 @@
 
 ## 🚀 Deployment & Beta Phase
 
-### **Pre-Launch Tasks**
-- [ ] Comprehensive testing suite
-- [ ] Performance optimization
-- [ ] Brand update and polish
-- [ ] Documentation preparation
+### **Deployment Platform Analysis**
 
-### **Deployment Options to Evaluate**
-- **Vercel** (recommended for Next.js compatibility)
-- **Netlify** (good for static sites)
-- **Railway** (full-stack support)
-- **Fly.io** (edge deployment)
+#### **Recommended: Vercel**
+**Pros:**
+- Optimized for React/Vite apps with automatic optimization
+- Excellent Supabase integration
+- Free tier includes 100GB bandwidth, perfect for beta
+- Automatic HTTPS, global CDN
+- Preview deployments for each PR
+- Environment variable management
+- Zero-config deployment from GitHub
+
+**Cons:**
+- Serverless functions timeout (10s free, 60s pro)
+- No persistent storage (not needed with Supabase)
+
+**Best for:** Your current stack (React + Vite + Supabase)
+
+---
+
+#### **Alternative 1: Render**
+**Pros:**
+- Full-stack hosting with persistent storage
+- Automatic deploys from GitHub
+- Free tier includes 750 hours/month
+- WebSocket support for real-time features
+- Background workers support
+
+**Cons:**
+- Free tier spins down after 15 min inactivity
+- Slower cold starts than Vercel
+- Less optimized for static assets
+
+**Best for:** If you need persistent backend processes
+
+---
+
+#### **Alternative 2: Cloudflare Pages**
+**Pros:**
+- Unlimited bandwidth on free tier
+- Fastest global CDN
+- Workers for edge computing
+- Excellent DDoS protection
+- Great for static sites
+
+**Cons:**
+- Less intuitive for React apps
+- Limited build minutes (500/month free)
+- Functions have 10ms CPU limit
+
+**Best for:** Maximum performance and security
+
+---
+
+#### **Alternative 3: Railway**
+**Pros:**
+- Simple deployment process
+- Good for full-stack apps
+- Supports Docker containers
+- PostgreSQL hosting included
+- WebSocket support
+
+**Cons:**
+- No free tier (starts at $5/month)
+- Less mature than competitors
+- Smaller community
+
+**Best for:** If you want everything in one place
+
+---
+
+### **Deployment Recommendation**
+
+**Primary: Vercel**
+1. Perfect for React + Vite setup
+2. Excellent Supabase integration
+3. Free tier sufficient for beta testing
+4. Automatic optimizations for web vitals
+5. Easy rollback and preview deployments
+
+**Deployment Steps:**
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Set environment variables
+vercel env add VITE_SUPABASE_URL
+vercel env add VITE_SUPABASE_ANON_KEY
+```
+
+**Backup: Render**
+- Use if you encounter Vercel limitations
+- Better for long-running processes
+- Consider for production if user base grows
+
+---
+
+### **Pre-Launch Tasks**
+- [ ] Environment variable configuration
+- [ ] Performance optimization (bundle size, lazy loading)
+- [ ] Brand update and polish
+- [ ] Clean up debugging logs and sensitive environment variables
+- [ ] SEO meta tags and OpenGraph setup
+- [ ] Error tracking setup (Sentry)
+- [ ] Analytics implementation (Vercel Analytics or Mixpanel)
+- [ ] Domain configuration
+- [ ] Production database indexes
 
 ### **Beta User Trial Setup**
 - [ ] Create beta signup flow
