@@ -14,7 +14,6 @@ import { FeatherPlus } from "@subframe/core";
 import { FeatherFilter } from "@subframe/core";
 import { Avatar } from "@/ui/components/Avatar";
 import { IconButton } from "@/ui/components/IconButton";
-import { FeatherMoreVertical } from "@subframe/core";
 import { FeatherHeart } from "@subframe/core";
 import { FeatherMessageCircle } from "@subframe/core";
 import { FeatherBookmark } from "@subframe/core";
@@ -193,20 +192,28 @@ function SavedPage() {
     setFilteredVisualizations(filtered);
   }, [visualizations, searchTerm, selectedFolder, folders, sortBy]);
   
-  // Handle unsave
+  // Handle unsave with confirmation
   const handleUnsave = async (visualizationId: string) => {
+    const confirmed = window.confirm('Are you sure you want to remove this from your saved items?');
+    if (!confirmed) return;
+    
     try {
       const { error } = await toggleSave(visualizationId);
       if (!error) {
+        // Optimistic UI update
         setVisualizations(prev => prev.filter(viz => viz.id !== visualizationId));
         // Remove from all folders
         setFolders(prev => prev.map(folder => ({
           ...folder,
           visualizationIds: folder.visualizationIds.filter(id => id !== visualizationId)
         })));
+      } else {
+        // Revert on error
+        alert('Failed to remove from saved. Please try again.');
       }
     } catch (error) {
       console.error('Error removing from saved:', error);
+      alert('An error occurred. Please try again.');
     }
   };
   
@@ -281,17 +288,6 @@ function SavedPage() {
     ));
   };
   
-  const addToFolder = (visualizationId: string, folderId: string) => {
-    setFolders(prev => prev.map(folder => {
-      if (folder.id === folderId) {
-        const newIds = folder.visualizationIds.includes(visualizationId)
-          ? folder.visualizationIds.filter(id => id !== visualizationId)
-          : [...folder.visualizationIds, visualizationId];
-        return { ...folder, visualizationIds: newIds };
-      }
-      return folder;
-    }));
-  };
 
   const handleDragDrop = async (visualizationId: string, folderId: string) => {
     if (!user || folderId === 'all') return; // Can't add to "All Saved"
@@ -310,6 +306,29 @@ function SavedPage() {
       }
     } catch (error) {
       console.error('Error adding to folder:', error);
+    }
+  };
+  
+  const handleRemoveFromFolder = async (visualizationId: string, folderId: string) => {
+    if (!user || folderId === 'all') return; // Can't remove from "All Saved"
+    
+    try {
+      const { error } = await removeVisualizationFromFolder(visualizationId, folderId);
+      
+      if (!error) {
+        // Update local state
+        setFolders(prev => prev.map(folder => {
+          if (folder.id === folderId) {
+            return { 
+              ...folder, 
+              visualizationIds: folder.visualizationIds.filter(id => id !== visualizationId) 
+            };
+          }
+          return folder;
+        }));
+      }
+    } catch (error) {
+      console.error('Error removing from folder:', error);
     }
   };
   
@@ -339,7 +358,7 @@ function SavedPage() {
           onClick={handleCardClick}
         >
         {/* Visualization preview */}
-        <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-hidden rounded-md bg-black">
+        <div className="relative flex h-48 w-full flex-none items-center justify-center overflow-visible rounded-md bg-black">
           <img
             className="grow shrink-0 basis-0 self-stretch object-cover opacity-50"
             src={viz.thumbnail_url || viz.profiles?.banner_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3"}
@@ -356,6 +375,24 @@ function SavedPage() {
               }}
             />
           </div>
+          
+          {/* Folder badges - moved inside preview container */}
+          {inFolders.length > 0 && (
+            <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[calc(100%-80px)] z-10">
+              {inFolders.slice(0, 2).map(folder => (
+                <Badge key={folder.id} variant="neutral" className="text-xs bg-black/70 backdrop-blur-sm">
+                  <FeatherFolder className="w-2 h-2" />
+                  {folder.name}
+                </Badge>
+              ))}
+              {inFolders.length > 2 && (
+                <Badge variant="neutral" className="text-xs bg-black/70 backdrop-blur-sm">
+                  +{inFolders.length - 2}
+                </Badge>
+              )}
+            </div>
+          )}
+          
           {viz.audio_file_name && (
             <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1">
               <FeatherMusic className="text-caption font-caption text-white" />
@@ -364,32 +401,33 @@ function SavedPage() {
               </span>
             </div>
           )}
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-2 right-2 z-10">
             <Popover
               trigger={
                 <IconButton
                   variant="inverse"
                   size="small"
-                  icon={<FeatherMoreVertical />}
+                  icon={<FeatherX />}
+                  className="bg-red-600/80 hover:bg-red-700/90"
                 />
               }
               position="bottom-left"
+              className="z-50"
             >
-              <PopoverLabel>Add to folder</PopoverLabel>
-              {folders.filter(f => f.id !== 'all').map(folder => (
-                <PopoverItem
-                  key={folder.id}
-                  onClick={() => addToFolder(viz.id, folder.id)}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>{folder.name}</span>
-                    {folder.visualizationIds.includes(viz.id) && (
-                      <FeatherCheck className="text-success-600" />
-                    )}
-                  </div>
-                </PopoverItem>
-              ))}
-              <PopoverSeparator />
+              {inFolders.length > 0 && (
+                <>
+                  <PopoverLabel>Remove from folder</PopoverLabel>
+                  {inFolders.map(folder => (
+                    <PopoverItem
+                      key={folder.id}
+                      onClick={() => handleRemoveFromFolder(viz.id, folder.id)}
+                    >
+                      {folder.name}
+                    </PopoverItem>
+                  ))}
+                  <PopoverSeparator />
+                </>
+              )}
               <PopoverItem
                 onClick={() => handleUnsave(viz.id)}
                 variant="danger"
@@ -434,23 +472,6 @@ function SavedPage() {
             </div>
           </div>
         </div>
-        
-        {/* Folder badges */}
-        {inFolders.length > 0 && (
-          <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[calc(100%-16px)]">
-            {inFolders.slice(0, 2).map(folder => (
-              <Badge key={folder.id} variant="neutral" className="text-xs">
-                <FeatherFolder className="w-2 h-2" />
-                {folder.name}
-              </Badge>
-            ))}
-            {inFolders.length > 2 && (
-              <Badge variant="neutral" className="text-xs">
-                +{inFolders.length - 2}
-              </Badge>
-            )}
-          </div>
-        )}
         
         {/* Stats */}
         <div className="flex w-full items-center justify-between text-caption font-caption text-subtext-color">
@@ -637,14 +658,16 @@ function SavedPage() {
                             onClick={() => setSelectedFolder(folder.id === selectedFolder ? 'all' : folder.id)}
                           >
                           <div className="flex items-center gap-2">
-                            <IconButton
-                              size="small"
-                              icon={folder.isExpanded ? <FeatherChevronDown /> : <FeatherChevronRight />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFolderExpanded(folder.id);
-                              }}
-                            />
+                            {folder.id !== 'all' && (
+                              <IconButton
+                                size="small"
+                                icon={folder.isExpanded ? <FeatherChevronDown /> : <FeatherChevronRight />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleFolderExpanded(folder.id);
+                                }}
+                              />
+                            )}
                             <FeatherFolder className="text-body font-body text-default-font" />
                             {editingFolderId === folder.id ? (
                               <TextField className="flex-1" label="" helpText="">

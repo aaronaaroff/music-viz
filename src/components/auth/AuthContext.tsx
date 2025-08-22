@@ -3,7 +3,10 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import type { Database } from '../../lib/database.types';
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
+type Profile = Database['public']['Tables']['profiles']['Row'] & {
+  followers_count?: number;
+  following_count?: number;
+};
 
 interface AuthContextType {
   user: User | null;
@@ -24,22 +27,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
-  // Fetch profile with proper error handling and timeout
+  // Fetch profile with proper error handling
   const fetchProfile = async (userId: string): Promise<void> => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, followers_count, following_count')
         .eq('id', userId)
         .single();
-
-      clearTimeout(timeoutId);
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -72,169 +68,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setProfile(data);
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.error('Profile fetch timed out');
-      } else {
-        console.error('Error fetching profile:', error);
-      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
       setProfile(null);
     }
   };
 
-  // Initialize auth state
+  // Initialize auth state and listen for changes
   useEffect(() => {
-    let mounted = true;
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
+      setLoading(false);
+    });
 
-    const initializeAuth = async () => {
-      try {
-        // Get the session from Supabase
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-        
-        if (error) throw error;
-        
-        if (!mounted) return;
-
-        if (initialSession) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchProfile(initialSession.user.id);
-        } else {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        setSession(null);
-        setUser(null);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
         setProfile(null);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-          setIsInitialized(true);
-        }
       }
-    };
+      
+      setLoading(false);
+    });
 
-    // Initialize auth
-    initializeAuth();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        if (!mounted || !isInitialized) return;
-
-
-        // Update session and user
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-
-        // Update profile
-        if (newSession?.user) {
-          await fetchProfile(newSession.user.id);
-        } else {
-          setProfile(null);
-        }
-
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [isInitialized]);
-
-  // Handle tab visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      // Only refresh if it's been more than 30 seconds AND we currently have a user
-      if (!document.hidden && user && Date.now() - lastRefresh > 30000) {
-        
-        try {
-          // Just validate the session without disrupting the current state
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          
-          if (currentSession?.user && currentSession.user.id === user.id) {
-            // Session is still valid for the same user, just update timestamp
-            setLastRefresh(Date.now());
-          } else if (!currentSession?.user && user) {
-            // Session expired, need to clear state
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-          }
-          // If currentSession has a different user, let the normal auth flow handle it
-          
-        } catch (error) {
-          console.error('Error validating auth on tab focus:', error);
-        }
-      } else if (!document.hidden && user) {
-        // Tab became visible but not enough time passed, do a quick session check
-        try {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (!currentSession?.user && user) {
-            // Session expired, clear state immediately
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-          }
-        } catch (error) {
-          console.warn('Quick session check failed:', error);
-        }
-        setLastRefresh(Date.now());
-      }
-    };
-
-    // Handle cross-tab auth state synchronization
-    const handleStorageChange = async (e: StorageEvent) => {
-      if (e.key === 'music-viz-supabase-auth' && e.newValue) {
-        
-        // Give Supabase a moment to sync
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        
-        if (currentSession?.user) {
-          setSession(currentSession);
-          setUser(currentSession.user);
-          await fetchProfile(currentSession.user.id);
-        } else {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-        }
-      }
-    };
-
-    // Handle network reconnection - check auth state when online again
-    const handleOnline = async () => {
-      if (user) {
-        try {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (!currentSession?.user && user) {
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-          }
-        } catch (error) {
-          console.warn('Network reconnection auth check failed:', error);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('online', handleOnline);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [user, lastRefresh]);
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -287,21 +154,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
-      
-      // Clear state immediately to provide instant feedback
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      
-      // Then sign out from Supabase
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      // Force a small delay to ensure UI updates
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Update last refresh to prevent immediate re-fetch
-      setLastRefresh(Date.now());
+      // Clear state after sign out
+      setSession(null);
+      setUser(null);
+      setProfile(null);
     } catch (error) {
       console.error('Sign out error:', error);
     } finally {

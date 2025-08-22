@@ -222,6 +222,7 @@ function MusicVizUpload() {
                 visualizationName: visualization.title,
                 settings: visualization.settings,
                 tags: visualization.tags || [],
+                isPublic: visualization.is_public,
                 audioSource: visualization.audio_file_name ? {
                   type: 'file' as any,
                   fileName: visualization.audio_file_name,
@@ -250,6 +251,8 @@ function MusicVizUpload() {
             if (visualization.audio_file_name) {
               setUploadedFileName(visualization.audio_file_name);
               setCurrentAudioFileUrl(visualization.audio_file_url || '');
+              // Clear any pending file upload since we're loading from URL
+              setCurrentAudioFile(null);
               
               // Restore audio file from Supabase Storage if available
               if (visualization.audio_file_url) {
@@ -257,7 +260,8 @@ function MusicVizUpload() {
                   // Load audio file from URL and recreate audio source
                   const audioFile = await loadAudioFileFromUrl(
                     visualization.audio_file_url, 
-                    visualization.audio_file_name
+                    visualization.audio_file_name,
+                    visualization.audio_file_hash || undefined
                   );
                   
                   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -288,6 +292,9 @@ function MusicVizUpload() {
         clearSession();
         setCurrentVisualizationId(null);
         setUploadedFileName("");
+        setCurrentAudioFile(null);
+        setCurrentAudioFileUrl("");
+        setCurrentAudioFilePath("");
         setCurrentTime(0);
         setDuration(0);
         setUploadFeedback({ type: null, message: "" });
@@ -350,10 +357,15 @@ function MusicVizUpload() {
           if (savedSession.tags) {
             setSelectedTags(savedSession.tags);
           }
+          if (savedSession.isPublic !== undefined) {
+            setIsCurrentVizPublic(savedSession.isPublic);
+          }
           if (savedSession.audioSource?.fileName) {
             setUploadedFileName(savedSession.audioSource.fileName);
             if (savedSession.audioSource.audioFileUrl) {
               setCurrentAudioFileUrl(savedSession.audioSource.audioFileUrl);
+              // Clear any pending file upload since we're loading from URL
+              setCurrentAudioFile(null);
               
               // Restore audio file from Supabase Storage
               const restoreAudioFromSession = async () => {
@@ -426,6 +438,7 @@ function MusicVizUpload() {
         visualizationName,
         settings: visualizationSettings,
         tags: selectedTags,
+        isPublic: isCurrentVizPublic,
         audioSource: uploadedFileName ? {
           type: currentSourceType as any,
           fileName: uploadedFileName,
@@ -452,6 +465,8 @@ function MusicVizUpload() {
     uploadedFileName, 
     currentSourceType, 
     selectedTags,
+    isCurrentVizPublic,
+    currentAudioFileUrl,
     saveSession
   ]);
   
@@ -570,6 +585,10 @@ function MusicVizUpload() {
       
       // Store the file for upload when saving
       setCurrentAudioFile(file);
+      
+      // Clear old audio file URL since we have a new file to upload
+      setCurrentAudioFileUrl("");
+      setCurrentAudioFilePath("");
       
       setUploadFeedback({ 
         type: 'success', 
@@ -703,6 +722,10 @@ function MusicVizUpload() {
     try {
       // Upload audio file to storage if we have one and it's not already uploaded
       let audioFileUrl = currentAudioFileUrl;
+      let audioFileHash: string | undefined;
+      let audioFileId: string | undefined;
+      
+      // Upload if we have a new file and no current URL (URL gets cleared when new file is uploaded)
       if (currentAudioFile && !currentAudioFileUrl) {
         try {
           const uploadResult = await uploadAudioFile({
@@ -712,6 +735,8 @@ function MusicVizUpload() {
           });
           
           audioFileUrl = uploadResult.url;
+          audioFileHash = uploadResult.fileHash;
+          audioFileId = uploadResult.fileId;
           setCurrentAudioFileUrl(uploadResult.url);
           setCurrentAudioFilePath(uploadResult.path);
         } catch (uploadError) {
@@ -730,13 +755,15 @@ function MusicVizUpload() {
         },
         audio_file_name: uploadedFileName ?? undefined,
         audio_file_url: audioFileUrl || undefined,
+        audio_file_hash: audioFileHash,
+        audio_file_id: audioFileId,
         is_public: isCurrentVizPublic,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       };
 
       if (currentVisualizationId) {
         // Update existing visualization with retry logic
-        const { data, error } = await robustUpdateVisualization(currentVisualizationId, visualizationData);
+        const { error } = await robustUpdateVisualization(currentVisualizationId, visualizationData);
         
         if (error) {
           throw new Error(error.message);
@@ -835,7 +862,7 @@ function MusicVizUpload() {
       if (isCurrentVizPublic) {
         // Make private
         setShareStatus({ type: null, message: "Returning to draft..." });
-        const { data, error } = await unshareVisualization(currentVisualizationId);
+        const { error } = await unshareVisualization(currentVisualizationId);
         
         if (error) {
           setShareStatus({ 
@@ -852,7 +879,7 @@ function MusicVizUpload() {
       } else {
         // Make public
         setShareStatus({ type: null, message: "Publishing visualization..." });
-        const { data, error } = await shareVisualization(currentVisualizationId);
+        const { error } = await shareVisualization(currentVisualizationId);
         
         if (error) {
           setShareStatus({ 

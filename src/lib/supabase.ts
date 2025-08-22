@@ -17,9 +17,28 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
     // Use a unique storage key to prevent conflicts
-    storageKey: 'music-viz-supabase-auth'
+    storageKey: 'music-viz-supabase-auth',
+    // Keep session alive across tab switches
+    storage: {
+      getItem: (key) => {
+        if (typeof window !== 'undefined') {
+          return window.localStorage.getItem(key);
+        }
+        return null;
+      },
+      setItem: (key, value) => {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, value);
+        }
+      },
+      removeItem: (key) => {
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(key);
+        }
+      }
+    }
   }
 });
 

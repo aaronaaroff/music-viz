@@ -61,6 +61,8 @@ export interface Database {
           settings: Json
           audio_file_url: string | null
           audio_file_name: string | null
+          audio_file_hash: string | null
+          audio_file_id: string | null
           thumbnail_url: string | null
           is_public: boolean
           is_draft: boolean
@@ -82,6 +84,8 @@ export interface Database {
           settings: Json
           audio_file_url?: string | null
           audio_file_name?: string | null
+          audio_file_hash?: string | null
+          audio_file_id?: string | null
           thumbnail_url?: string | null
           is_public?: boolean
           is_draft?: boolean
@@ -103,6 +107,8 @@ export interface Database {
           settings?: Json
           audio_file_url?: string | null
           audio_file_name?: string | null
+          audio_file_hash?: string | null
+          audio_file_id?: string | null
           thumbnail_url?: string | null
           is_public?: boolean
           is_draft?: boolean

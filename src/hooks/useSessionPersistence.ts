@@ -5,6 +5,7 @@ interface SessionState {
   visualizationName: string;
   settings: any;
   tags?: string[];
+  isPublic?: boolean;
   audioSource?: {
     type: 'file' | 'microphone' | 'keyboard';
     fileName?: string;

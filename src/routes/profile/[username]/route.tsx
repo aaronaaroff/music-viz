@@ -34,6 +34,8 @@ type PublicProfile = {
   avatar_url: string | null;
   banner_url: string | null;
   is_public?: boolean;
+  followers_count?: number;
+  following_count?: number;
 };
 
 function PublicProfilePage() {
@@ -67,7 +69,7 @@ function PublicProfilePage() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, username, full_name, bio, avatar_url, banner_url, is_public')
+          .select('id, username, full_name, bio, avatar_url, banner_url, is_public, followers_count, following_count')
           .eq('username', username)
           .single();
 
@@ -353,10 +355,10 @@ function PublicProfilePage() {
                 </div>
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Total Views
+                    Followers
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.reduce((sum, v) => sum + (v.views_count || 0), 0)}
+                    {profileUser?.followers_count || 0}
                   </span>
                 </div>
               </div>

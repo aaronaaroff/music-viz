@@ -140,16 +140,8 @@ export function FolderSelectionPopover({
   };
 
   return (
-    <Popover trigger={trigger} position="bottom-left">
+    <Popover trigger={trigger} position="bottom-left" className="z-50">
       <PopoverLabel>{isSaved ? 'Add to folder' : 'Save to folder'}</PopoverLabel>
-      
-      {!isSaved && (
-        <div className="px-3 py-2 bg-blue-50 border-b border-blue-200">
-          <span className="text-caption font-caption text-blue-700">
-            This will save the visualization and add it to your selected folder
-          </span>
-        </div>
-      )}
       
       {loading ? (
         <div className="px-3 py-2">

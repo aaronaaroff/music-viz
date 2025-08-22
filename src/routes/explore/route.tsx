@@ -65,6 +65,7 @@ function ExplorePage() {
   const [comments, setComments] = useState<{ [key: string]: Comment[] }>({});
   const [newComment, setNewComment] = useState("");
   const [filterByFollowing, setFilterByFollowing] = useState(false);
+  const [filterBySaved, setFilterBySaved] = useState(false);
   const [trendingCreators, setTrendingCreators] = useState<any[]>([]);
   const [followingStatus, setFollowingStatus] = useState<Record<string, boolean>>({});
   const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
@@ -177,8 +178,15 @@ function ExplorePage() {
       );
     }
     
+    // Saved filter
+    if (filterBySaved && user) {
+      filtered = filtered.filter(viz => 
+        viz.user_saved && viz.user_saved.length > 0
+      );
+    }
+    
     setFilteredVisualizations(filtered);
-  }, [visualizations, searchTerm, selectedCategory, filterByFollowing, user, followingUserIds]);
+  }, [visualizations, searchTerm, selectedCategory, filterByFollowing, filterBySaved, user, followingUserIds]);
   
   // Handle like
   const handleLike = async (visualizationId: string) => {
@@ -622,6 +630,22 @@ function ExplorePage() {
                       onClick={() => setFilterByFollowing(!filterByFollowing)}
                     >
                       {filterByFollowing ? 'On' : 'Off'}
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Saved filter */}
+                {user && (
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-body-bold font-body-bold text-default-font">
+                      Show only saved
+                    </span>
+                    <Button
+                      variant={filterBySaved ? "brand-primary" : "neutral-secondary"}
+                      size="small"
+                      onClick={() => setFilterBySaved(!filterBySaved)}
+                    >
+                      {filterBySaved ? 'On' : 'Off'}
                     </Button>
                   </div>
                 )}

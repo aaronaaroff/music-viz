@@ -487,10 +487,10 @@ function UserProfileHub() {
                 </div>
                 <div className="flex flex-col items-start">
                   <span className="text-caption font-caption text-subtext-color">
-                    Total Views
+                    Followers
                   </span>
                   <span className="text-body-bold font-body-bold text-default-font">
-                    {visualizations.reduce((sum, v) => sum + (v.views_count || 0), 0)}
+                    {profile?.followers_count || 0}
                   </span>
                 </div>
               </div>

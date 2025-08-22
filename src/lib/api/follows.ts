@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 import type { Database } from '../database.types';
 
-// Follow a user
+// Follow a user with optimistic update support
 export async function followUser(userId: string) {
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -19,7 +19,7 @@ export async function followUser(userId: string) {
     .select('id')
     .eq('follower_id', session.user.id)
     .eq('following_id', userId)
-    .single();
+    .maybeSingle();
 
   if (existingFollow) {
     return { error: { message: 'Already following this user' } };
@@ -32,10 +32,21 @@ export async function followUser(userId: string) {
       following_id: userId
     });
 
+  // Fetch updated count after successful follow
+  if (!error) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('followers_count')
+      .eq('id', userId)
+      .single();
+    
+    return { isFollowing: true, newCount: profile?.followers_count, error };
+  }
+
   return { isFollowing: true, error };
 }
 
-// Unfollow a user
+// Unfollow a user with optimistic update support
 export async function unfollowUser(userId: string) {
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -48,6 +59,17 @@ export async function unfollowUser(userId: string) {
     .delete()
     .eq('follower_id', session.user.id)
     .eq('following_id', userId);
+
+  // Fetch updated count after successful unfollow
+  if (!error) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('followers_count')
+      .eq('id', userId)
+      .single();
+    
+    return { isFollowing: false, newCount: profile?.followers_count, error };
+  }
 
   return { isFollowing: false, error };
 }
@@ -70,7 +92,7 @@ export async function toggleFollow(userId: string) {
     .select('id')
     .eq('follower_id', session.user.id)
     .eq('following_id', userId)
-    .single();
+    .maybeSingle();
 
   if (existingFollow) {
     // Unfollow
@@ -112,9 +134,10 @@ export async function checkIsFollowing(userId: string) {
     .select('id')
     .eq('follower_id', session.user.id)
     .eq('following_id', userId)
-    .single();
+    .maybeSingle(); // Use maybeSingle instead of single to handle no records
 
-  return { isFollowing: !!data, error };
+  // No error if no record found, just return false
+  return { isFollowing: !!data, error: error?.code === 'PGRST116' ? null : error };
 }
 
 // Get trending creators (based on likes and followers)
